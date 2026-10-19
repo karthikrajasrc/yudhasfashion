@@ -1,15 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, ShoppingBag } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import type { Product } from "@/data/catalog";
 import { discountPercent, effectivePrice, formatINR } from "@/lib/format";
 import { useShop } from "@/context/shop-context";
-import { cn } from "@/lib/utils";
 
 export function ProductCard({ product }: { product: Product }) {
-  const { addToCart, toggleWishlist, isWishlisted } = useShop();
+  const { addToCart } = useShop();
   const off = discountPercent(product.price, product.salePrice);
   const price = effectivePrice(product.price, product.salePrice);
-  const wishlisted = isWishlisted(product.id);
   const cover = product.images[0] ?? "";
 
   return (
@@ -31,67 +29,66 @@ export function ProductCard({ product }: { product: Product }) {
           />
         </Link>
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3">
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-2 sm:p-3">
           <div className="flex flex-col gap-1.5">
             {off > 0 && (
-              <span className="bg-wine-gradient px-2 py-1 text-[0.62rem] tracking-[0.2em] text-ivory">
+              <span className="bg-wine-gradient px-1.5 py-1 text-[0.55rem] tracking-[0.12em] text-ivory sm:px-2 sm:text-[0.62rem] sm:tracking-[0.2em]">
                 {off}% OFF
               </span>
             )}
             {product.newArrival && (
-              <span className="border border-border bg-background/70 px-2 py-1 text-[0.62rem] tracking-[0.2em] text-primary">
+              <span className="border border-border bg-background/70 px-1.5 py-1 text-[0.55rem] tracking-[0.12em] text-primary sm:px-2 sm:text-[0.62rem] sm:tracking-[0.2em]">
                 NEW
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => toggleWishlist(product.id)}
-            aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-            className="pointer-events-auto grid size-9 place-items-center border border-border bg-background/70 text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
-          >
-            <Heart className={cn("size-4", wishlisted && "fill-current")} />
-          </button>
-        </div>
-
-        <div className="absolute inset-x-0 bottom-0 translate-y-full p-3 transition-transform duration-500 group-hover:translate-y-0">
-          <button
-            type="button"
-            disabled={product.stock <= 0}
-            onClick={() =>
-              addToCart({
-                productId: product.id,
-                name: product.name,
-                slug: product.slug,
-                image: cover,
-                price: product.price,
-                salePrice: product.salePrice,
-                size: product.sizes[0],
-                color: product.colors[0],
-              })
-            }
-            className="flex w-full items-center justify-center gap-2 bg-gold-gradient px-4 py-2.5 text-[0.7rem] tracking-[0.22em] text-primary-foreground uppercase disabled:opacity-50"
-          >
-            <ShoppingBag className="size-4" />
-            {product.stock > 0 ? "Add to bag" : "Sold out"}
-          </button>
         </div>
       </div>
+      <button
+        type="button"
+        disabled={product.stock <= 0}
+        onClick={() =>
+          addToCart({
+            productId: product.id,
+            name: product.name,
+            slug: product.slug,
+            image: cover,
+            price: product.price,
+            salePrice: product.salePrice,
+            size: product.sizes[0],
+            color: product.colors[0],
+          })
+        }
+        className="mt-2 flex w-full items-center justify-center gap-1.5 bg-gold-gradient px-2 py-2 text-[0.58rem] tracking-[0.12em] text-primary-foreground uppercase disabled:opacity-50 sm:mt-3 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-[0.7rem] sm:tracking-[0.22em]"
+      >
+        <ShoppingBag className="size-3.5 sm:size-4" />
+        {product.stock > 0 ? "Add to bag" : "Sold out"}
+      </button>
 
-      <div className="mt-4 space-y-1.5 text-center">
-        <h3 className="font-display text-lg leading-snug">
-          <Link to="/product/$slug" params={{ slug: product.slug }} className="hover:text-primary">
+      <div className="mt-2 space-y-1 text-center sm:mt-4 sm:space-y-1.5">
+        <h3 className="font-display text-sm leading-snug sm:text-lg">
+          <Link
+            to="/product/$slug"
+            params={{ slug: product.slug }}
+            className="hover:text-primary"
+          >
             {product.name}
           </Link>
         </h3>
-        <div className="flex items-baseline justify-center gap-2 text-sm">
+        <div className="flex flex-wrap items-baseline justify-center gap-x-1.5 text-xs sm:gap-2 sm:text-sm">
           <span className="text-primary">{formatINR(price)}</span>
           {off > 0 && (
-            <span className="text-muted-foreground line-through">{formatINR(product.price)}</span>
+            <span className="text-muted-foreground line-through">
+              {formatINR(product.price)}
+            </span>
           )}
         </div>
-        <p className="text-[0.68rem] tracking-[0.18em] text-muted-foreground uppercase">
-          {product.stock > 0 ? (product.stock < 6 ? `Only ${product.stock} left` : "In stock") : "Out of stock"}
+        <p className="text-[0.58rem] tracking-[0.1em] text-muted-foreground uppercase sm:text-[0.68rem] sm:tracking-[0.18em]">
+          {product.stock > 0
+            ? product.stock < 6
+              ? `Only ${product.stock} left`
+              : "In stock"
+            : "Out of stock"}
         </p>
       </div>
     </article>

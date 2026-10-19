@@ -1,18 +1,17 @@
 import { Router } from "express";
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { User } from "../models/user.js";
 import { Order } from "../models/order.js";
 import { Product } from "../models/product.js";
-import { storeProducts } from "../constants/catalog-products.js";
+import { Category } from "../models/category.js";
+import { buildOrderDetails, OrderDetailsError } from "../lib/order-details.js";
 import { requireAdmin, requireAuth } from "../middleware/require-auth.js";
 
 export const ordersRouter = Router();
-const createOrderSchema = z.object({
+export const createOrderSchema = z.object({
   customerName: z.string().trim().min(1).max(100),
   phone: z.string().trim().min(7).max(30),
   shippingAddress: z.string().trim().min(5).max(1000),
-  district: z.string().trim().min(1).max(100),
   couponCode: z.string().trim().max(40).optional(),
   items: z
     .array(
@@ -35,6 +34,50 @@ const allowedStatuses = [
   "cancelled",
 ];
 
+async function addProductDetails(orders) {
+  const productIds = [
+    ...new Set(
+      orders.flatMap((order) =>
+        order.items
+          .map((item) => item.productId)
+          .filter((id) => /^[a-f\d]{24}$/i.test(id)),
+      ),
+    ),
+  ];
+  const products = await Product.find({ _id: { $in: productIds } })
+    .select("sku categorySlug")
+    .lean();
+  const categorySlugs = [
+    ...new Set(products.map((product) => product.categorySlug)),
+  ];
+  const categories = await Category.find({ slug: { $in: categorySlugs } })
+    .select("name slug")
+    .lean();
+  const productsById = new Map(
+    products.map((product) => [String(product._id), product]),
+  );
+  const categoriesBySlug = new Map(
+    categories.map((category) => [category.slug, category.name]),
+  );
+
+  return orders.map((order) => {
+    const orderData = order.toObject();
+    orderData.items = orderData.items.map((item) => {
+      const product = productsById.get(item.productId);
+      return {
+        ...item,
+        sku: item.sku ?? product?.sku ?? null,
+        categorySlug: item.categorySlug ?? product?.categorySlug ?? null,
+        categoryName:
+          item.categoryName ??
+          (product ? categoriesBySlug.get(product.categorySlug) : null) ??
+          null,
+      };
+    });
+    return orderData;
+  });
+}
+
 ordersRouter.post("/", requireAuth, async (req, res, next) => {
   const parsed = createOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -46,72 +89,26 @@ ordersRouter.post("/", requireAuth, async (req, res, next) => {
     const user = await User.findById(req.authUserId);
     if (!user)
       return res.status(401).json({ message: "Authentication required" });
-    const databaseIds = parsed.data.items
-      .map((item) => item.productId)
-      .filter((id) => /^[a-f\d]{24}$/i.test(id));
-    const databaseProducts = await Product.find({ _id: { $in: databaseIds } });
-    const productsById = new Map(
-      databaseProducts.map((product) => [product.id, product]),
-    );
-    const items = [];
-    for (const item of parsed.data.items) {
-      const product = productsById.get(item.productId);
-      const snapshot = product
-        ? {
-            name: product.name,
-            image: product.imageUrl,
-            price: product.salePrice ?? product.price,
-          }
-        : storeProducts.get(item.productId);
-      if (!snapshot) {
-        return res
-          .status(400)
-          .json({ message: "One or more cart products are unavailable" });
-      }
-      items.push({ ...snapshot, ...item });
-    }
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0,
-    );
-    const deliveryRates = new Map([
-      ["Chennai", 50],
-      ["Coimbatore", 70],
-      ["Madurai", 80],
-      ["Trichy", 60],
-      ["Salem", 65],
-    ]);
-    const deliveryRate = deliveryRates.get(parsed.data.district);
-    if (deliveryRate === undefined) {
-      return res
-        .status(400)
-        .json({ message: "Select a supported delivery district" });
-    }
-    let discount = 0;
-    const couponCode = parsed.data.couponCode?.toUpperCase() ?? "";
-    if (couponCode === "YUDHAS10" && subtotal >= 2000) {
-      discount = Math.min(Math.round(subtotal * 0.1), 1500);
-    } else if (couponCode === "GOLD500" && subtotal >= 4000) {
-      discount = 500;
-    } else if (couponCode) {
-      return res.status(400).json({
-        message: "Coupon is invalid or does not meet the minimum order",
-      });
-    }
-    const deliveryCharge = subtotal >= 5000 ? 0 : deliveryRate;
     const order = await Order.create({
-      ...parsed.data,
-      items,
-      customerEmail: user.email,
-      user: user._id,
-      orderNumber: `YF-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`,
-      subtotal,
-      discount,
-      couponCode,
-      deliveryCharge,
-      total: Math.max(0, subtotal - discount + deliveryCharge),
+      ...(await buildOrderDetails(user, parsed.data)),
+      paymentMethod: "cash_on_delivery",
+      paymentStatus: "pending",
     });
     return res.status(201).json({ order });
+  } catch (error) {
+    if (error instanceof OrderDetailsError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+ordersRouter.get("/mine", requireAuth, async (req, res, next) => {
+  try {
+    const orders = await Order.find({ user: req.authUserId })
+      .sort({ createdAt: -1 })
+      .populate("user", "name email");
+    return res.json({ orders: await addProductDetails(orders) });
   } catch (error) {
     return next(error);
   }
@@ -121,13 +118,41 @@ ordersRouter.get(
   "/admin",
   requireAuth,
   requireAdmin,
-  async (_req, res, next) => {
+  async (req, res, next) => {
+    const filters = z
+      .object({
+        status: z.enum(allowedStatuses).optional(),
+        from: z.string().datetime({ offset: true }).optional(),
+        to: z.string().datetime({ offset: true }).optional(),
+      })
+      .safeParse(req.query);
+    if (!filters.success) {
+      return res.status(400).json({ message: "Invalid order filters" });
+    }
+
+    const { from, to, status } = filters.data;
+    const startDate = from ? new Date(from) : undefined;
+    const endExclusive = to ? new Date(to) : undefined;
+    if (startDate && endExclusive && startDate >= endExclusive) {
+      return res
+        .status(400)
+        .json({ message: "Start date must be on or before end date" });
+    }
+
     try {
-      const orders = await Order.find()
+      const query = {};
+      if (status) query.status = status;
+      if (startDate || endExclusive) {
+        query.createdAt = {};
+        if (startDate) query.createdAt.$gte = startDate;
+        if (endExclusive) query.createdAt.$lt = endExclusive;
+      }
+
+      const orders = await Order.find(query)
         .sort({ createdAt: -1 })
         .limit(500)
         .populate("user", "name email");
-      return res.json({ orders });
+      return res.json({ orders: await addProductDetails(orders) });
     } catch (error) {
       return next(error);
     }

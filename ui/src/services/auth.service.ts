@@ -1,3 +1,5 @@
+import { readApiResponse } from "@/services/api-response";
+
 const apiUrl = (
   import.meta.env["VITE_API_URL"] ?? "http://localhost:4000"
 ).replace(/\/$/, "");
@@ -26,28 +28,10 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   }
 
   try {
-    const response = await fetch(`${apiUrl}/api/auth${path}`, options);
-    const result = (await response.json().catch(() => null)) as {
-      message?: string;
-    } | null;
-    if (!response.ok) {
-      throw new Error(
-        result?.message ?? "Unable to complete the authentication request",
-      );
-    }
-    return result as T;
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(
-        "The authentication server took too long to respond. Check that the API and MongoDB are running.",
-      );
-    }
-    if (error instanceof TypeError) {
-      throw new Error(
-        "Cannot reach the authentication server. Start the API with `npm run dev` from the api folder.",
-      );
-    }
-    throw error;
+    return await readApiResponse<T>(
+      fetch(`${apiUrl}/api/auth${path}`, options),
+      "Unable to complete the authentication request",
+    );
   } finally {
     window.clearTimeout(timeout);
   }
@@ -61,5 +45,5 @@ export const authService = {
   loginWithGoogle: (credential: string) =>
     request<AuthResponse>("/google", { credential }),
   currentUser: () => request<AuthResponse>("/me"),
-  logout: () => request<{ message: string }>("/logout"),
+  logout: () => request<{ message: string }>("/logout", {}),
 };

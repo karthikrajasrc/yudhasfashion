@@ -25,6 +25,8 @@ npm run dev
 
 Authentication is backed by the Express/MongoDB service in `../api`. Follow [the API setup guide](../api/README.md) to configure MongoDB, run the API, and set the Google OAuth client ID. The frontend uses `VITE_API_URL` (default `http://localhost:4000`) and `VITE_GOOGLE_CLIENT_ID` from its local `.env` file.
 
+Storefront products and categories are loaded from MongoDB through the API; the app does not include sample catalog records. Sign in with the admin account, open **Admin** in the navigation, create categories as needed, then add products with their images and details. If the database has no catalog data yet, storefront sections remain empty until you add it.
+
 ## Built with
 
 - TanStack Start

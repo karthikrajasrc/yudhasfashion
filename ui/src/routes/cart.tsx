@@ -8,11 +8,16 @@ import { useShop } from "@/context/shop-context";
 import { effectivePrice, formatINR } from "@/lib/format";
 import {
   getDeliveryQuote,
-  getDistricts,
+  getDeliverySettings,
   validateCoupon,
 } from "@/services/shop.service";
 import { useAuth } from "@/context/auth-context";
 import { createOrder } from "@/services/admin.service";
+import {
+  createRazorpayOrder,
+  loadRazorpay,
+  verifyRazorpayPayment,
+} from "@/services/payment.service";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
@@ -21,7 +26,7 @@ export const Route = createFileRoute("/cart")({
       {
         name: "description",
         content:
-          "Review your Yudhas Fashion bag, apply coupons and check district-based delivery charges.",
+          "Review your Yudhas Fashion bag, apply coupons and see delivery charges.",
       },
       { property: "og:title", content: "Your Bag | YUDHAS FASHION" },
       {
@@ -36,7 +41,6 @@ export const Route = createFileRoute("/cart")({
 function Cart() {
   const { cart, setQuantity, removeFromCart, cartCount, clearCart } = useShop();
   const { user } = useAuth();
-  const [district, setDistrict] = useState("");
   const [code, setCode] = useState("");
   const [coupon, setCoupon] = useState<{
     code: string;
@@ -46,14 +50,18 @@ function Cart() {
   const [phone, setPhone] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<
+    "razorpay" | "cash_on_delivery"
+  >("razorpay");
 
   useEffect(() => {
     if (user && !customerName) setCustomerName(user.name);
   }, [user, customerName]);
 
-  const { data: districts } = useQuery({
-    queryKey: ["districts"],
-    queryFn: getDistricts,
+  const deliverySettingsQuery = useQuery({
+    queryKey: ["delivery-settings"],
+    queryFn: getDeliverySettings,
   });
 
   const subtotal = cart.reduce(
@@ -66,26 +74,24 @@ function Cart() {
     0,
   );
 
-  const { data: quote } = useQuery({
-    queryKey: ["delivery", district, subtotal],
-    queryFn: () => getDeliveryQuote(district, subtotal),
-    enabled: district !== "" && subtotal > 0,
-  });
+  const quote = getDeliveryQuote(subtotal, deliverySettingsQuery.data);
 
   const delivery = quote?.charge ?? 0;
   const couponDiscount = coupon?.discount ?? 0;
-  const total = Math.max(0, subtotal - couponDiscount + delivery);
+  const total = quote
+    ? Math.max(0, subtotal - couponDiscount + delivery)
+    : null;
 
   const placeOrder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!user) return;
+    setActionError(null);
     setPlacingOrder(true);
     try {
-      const result = await createOrder({
+      const orderDetails = {
         customerName,
         phone,
         shippingAddress,
-        district,
         ...(coupon ? { couponCode: coupon.code } : {}),
         items: cart.map((line) => ({
           productId: line.productId,
@@ -93,26 +99,85 @@ function Cart() {
           ...(line.size ? { size: line.size } : {}),
           ...(line.color ? { color: line.color } : {}),
         })),
+      };
+      if (paymentMethod === "cash_on_delivery") {
+        const result = await createOrder(orderDetails);
+        toast.success(`Order ${result.order.orderNumber} placed`, {
+          description: "Your order has been sent to Yudhas Fashion.",
+        });
+        clearCart();
+        setCoupon(null);
+        setPlacingOrder(false);
+        return;
+      }
+
+      const paymentOrder = await createRazorpayOrder(orderDetails);
+      await loadRazorpay();
+      if (!window.Razorpay) {
+        throw new Error("Razorpay checkout could not be initialized");
+      }
+      const checkout = new window.Razorpay({
+        key: paymentOrder.keyId,
+        amount: paymentOrder.order.amount,
+        currency: paymentOrder.order.currency,
+        name: "Yudhas Fashion",
+        description: `Order ${paymentOrder.orderNumber}`,
+        order_id: paymentOrder.order.id,
+        prefill: {
+          name: customerName,
+          email: user.email,
+          contact: phone,
+        },
+        theme: { color: "#c6a15b" },
+        handler: (response) => {
+          void verifyRazorpayPayment(response)
+            .then((result) => {
+              if (result.paymentStatus === "captured") {
+                toast.success(`Payment received for ${result.orderNumber}`);
+                clearCart();
+                setCoupon(null);
+              } else {
+                toast.info(
+                  result.message ?? "Payment is processing. Please wait.",
+                );
+              }
+            })
+            .catch((error: unknown) => {
+              setActionError(
+                error instanceof Error
+                  ? error.message
+                  : "An unexpected server error occurred",
+              );
+            })
+            .finally(() => setPlacingOrder(false));
+        },
+        modal: {
+          ondismiss: () => setPlacingOrder(false),
+        },
       });
-      toast.success(`Order ${result.order.orderNumber} placed`, {
-        description: "Your order has been sent to Yudhas Fashion.",
+      checkout.on("payment.failed", (response) => {
+        setActionError(
+          response.error?.description ?? "Payment failed. Please try again.",
+        );
+        setPlacingOrder(false);
       });
-      clearCart();
-      setCoupon(null);
+      checkout.open();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to place your order",
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "An unexpected server error occurred",
       );
-    } finally {
       setPlacingOrder(false);
     }
   };
 
   const applyCoupon = async () => {
+    setActionError(null);
     const result = await validateCoupon(code, subtotal);
     if (!result.ok) {
       setCoupon(null);
-      toast.error(result.message);
+      setActionError(result.message);
       return;
     }
     setCoupon({ code: result.code, discount: result.discount });
@@ -259,39 +324,36 @@ function Cart() {
                 accent
               />
             )}
-            <div>
-              <p className="mb-2 text-xs tracking-[0.16em] text-muted-foreground uppercase">
-                Delivery district
+            {actionError && (
+              <p role="alert" className="text-sm text-destructive">
+                {actionError}
               </p>
-              <select
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                className="w-full border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-              >
-                <option value="">Select district</option>
-                {(districts ?? []).map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            )}
             <Row
               label="Delivery charge"
               value={
-                district === ""
-                  ? "Select district"
-                  : quote?.freeDelivery
+                quote
+                  ? quote.freeDelivery
                     ? "Free"
                     : formatINR(delivery)
+                  : deliverySettingsQuery.isError
+                    ? "Unavailable"
+                    : "Not configured"
               }
             />
+            {deliverySettingsQuery.isError && (
+              <p role="alert" className="text-xs text-destructive">
+                {deliverySettingsQuery.error.message}
+              </p>
+            )}
             <div className="hairline" />
             <div className="flex items-baseline justify-between">
               <span className="text-sm tracking-[0.16em] uppercase">
                 Grand total
               </span>
-              <span className="text-2xl text-primary">{formatINR(total)}</span>
+              <span className="text-2xl text-primary">
+                {total === null ? "—" : formatINR(total)}
+              </span>
             </div>
             {quote && !quote.freeDelivery && (
               <p className="text-xs text-muted-foreground">
@@ -299,21 +361,6 @@ function Cart() {
                 for free delivery.
               </p>
             )}
-          </div>
-
-          <div className="space-y-3 border border-border p-6">
-            <h2 className="eyebrow">Have a coupon?</h2>
-            <div className="flex gap-2">
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="YUDHAS10"
-                className="flex-1 border border-input bg-transparent px-3 py-2.5 text-sm outline-none focus:border-primary"
-              />
-              <GoldButton type="button" onClick={applyCoupon} className="px-5">
-                Apply
-              </GoldButton>
-            </div>
           </div>
 
           {user ? (
@@ -368,15 +415,32 @@ function Cart() {
                   className="w-full border border-input bg-transparent px-3 py-2.5 text-sm outline-none focus:border-primary"
                 />
               </label>
-              <p className="text-xs text-muted-foreground">
-                Cash on delivery. Payment processing is not configured yet.
-              </p>
+              <fieldset className="space-y-2">
+                <legend className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  Payment method
+                </legend>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="razorpay"
+                    checked={paymentMethod === "razorpay"}
+                    onChange={() => setPaymentMethod("razorpay")}
+                    className="accent-primary"
+                  />
+                  Pay online with Razorpay
+                </label>
+              </fieldset>
               <GoldButton
                 type="submit"
                 className="w-full"
-                disabled={placingOrder || !district}
+                disabled={placingOrder || !quote || cart.length === 0}
               >
-                {placingOrder ? "Placing order…" : "Place order"}
+                {placingOrder
+                  ? "Processing…"
+                  : paymentMethod === "razorpay"
+                    ? "Pay securely"
+                    : "Place order"}
               </GoldButton>
             </form>
           ) : (

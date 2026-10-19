@@ -18,19 +18,31 @@ const productSchema = new mongoose.Schema(
       uppercase: true,
     },
     categorySlug: { type: String, required: true, trim: true, lowercase: true },
-    shortDescription: {
+    subcategorySlug: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
-      maxlength: 240,
+      lowercase: true,
     },
     description: { type: String, required: true, trim: true, maxlength: 5000 },
     imageUrl: { type: String, required: true },
+    sizes: { type: [String], default: [] },
+    colors: { type: [String], default: [] },
+    specifications: {
+      type: [
+        {
+          label: { type: String, trim: true },
+          value: { type: String, trim: true },
+        },
+      ],
+      default: [],
+    },
     price: { type: Number, required: true, min: 0 },
     salePrice: { type: Number, default: null, min: 0 },
     stock: { type: Number, required: true, min: 0, default: 0 },
     featured: { type: Boolean, default: false },
     newArrival: { type: Boolean, default: true },
+    soldCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );

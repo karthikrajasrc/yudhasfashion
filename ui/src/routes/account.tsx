@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { User } from "lucide-react";
-import { toast } from "sonner";
 import { GoldButton } from "@/components/section";
 import { useAuth } from "@/context/auth-context";
 
@@ -10,13 +9,12 @@ export const Route = createFileRoute("/account")({
       { title: "My Account | YUDHAS FASHION" },
       {
         name: "description",
-        content:
-          "Sign in to track Yudhas Fashion orders, manage addresses and view your wishlist.",
+        content: "Sign in to manage your Yudhas Fashion account.",
       },
       { property: "og:title", content: "My Account | YUDHAS FASHION" },
       {
         property: "og:description",
-        content: "Your Yudhas Fashion orders, addresses and wishlist.",
+        content: "Manage your Yudhas Fashion account.",
       },
     ],
   }),
@@ -24,20 +22,7 @@ export const Route = createFileRoute("/account")({
 });
 
 function Account() {
-  const { user, loading, error, logout } = useAuth();
-
-  const signOut = async () => {
-    try {
-      await logout();
-      toast.success("Signed out");
-    } catch (requestError) {
-      toast.error(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to sign out",
-      );
-    }
-  };
+  const { user, loading, error } = useAuth();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 lg:px-8">
@@ -60,6 +45,13 @@ function Account() {
             <p className="text-xs uppercase tracking-[0.2em] text-primary">
               {user.role} account
             </p>
+            <Link
+              to="/orders"
+              className="inline-flex text-sm text-primary underline underline-offset-4"
+            >
+              View my orders
+            </Link>{" "}
+            &nbsp; &nbsp;
             {user.role === "admin" ? (
               <Link
                 to="/admin"
@@ -70,17 +62,17 @@ function Account() {
             ) : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="flex justify-center gap-3 pt-2">
-              <GoldButton type="button" onClick={() => void signOut()}>
-                Sign out
-              </GoldButton>
+              <Link to="/signout" className="inline-flex">
+                <GoldButton type="button">Sign out</GoldButton>
+              </Link>
             </div>
           </>
         ) : (
           <>
             <h2 className="text-2xl">Your Yudhas Fashion account</h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Sign in to manage your Yudhas Fashion account. Your bag and
-              wishlist are saved on this device.
+              Sign in to manage your Yudhas Fashion account. Your bag is saved
+              on this device.
             </p>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="pt-2">

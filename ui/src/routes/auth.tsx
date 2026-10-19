@@ -57,16 +57,20 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const target = safePath(search.redirect);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setErrorMessage(null);
     setBusy(true);
     try {
       if (mode === "register") {
         const parsed = registration.safeParse({ name, email, password });
         if (!parsed.success) {
-          toast.error(parsed.error.issues[0]?.message ?? "Check your details");
+          setErrorMessage(
+            parsed.error.issues[0]?.message ?? "Check your details",
+          );
           return;
         }
         await register(
@@ -78,7 +82,9 @@ function AuthPage() {
       } else {
         const parsed = credentials.safeParse({ email, password });
         if (!parsed.success) {
-          toast.error(parsed.error.issues[0]?.message ?? "Check your details");
+          setErrorMessage(
+            parsed.error.issues[0]?.message ?? "Check your details",
+          );
           return;
         }
         await login(parsed.data.email, parsed.data.password);
@@ -86,23 +92,28 @@ function AuthPage() {
       }
       navigate({ to: target, replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to sign in");
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "An unexpected server error occurred",
+      );
     } finally {
       setBusy(false);
     }
   };
 
   const google = async (credential: string) => {
+    setErrorMessage(null);
     setBusy(true);
     try {
       await loginWithGoogle(credential);
       toast.success("Signed in with Google");
       navigate({ to: target, replace: true });
     } catch (error) {
-      toast.error(
+      setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Unable to sign in with Google",
+          : "An unexpected server error occurred",
       );
     } finally {
       setBusy(false);
@@ -123,6 +134,11 @@ function AuthPage() {
             ? "Sign in to view product details, save favourites and check out."
             : "Create an account to explore the full collection and save your bag."}
         </p>
+        {errorMessage && (
+          <p role="alert" className="mt-4 text-sm text-destructive">
+            {errorMessage}
+          </p>
+        )}
 
         <form onSubmit={submit} className="mt-6 space-y-4">
           {mode === "register" ? (
@@ -210,13 +226,15 @@ function AuthPage() {
               <GoogleLogin
                 onSuccess={(response) => {
                   if (!response.credential) {
-                    toast.error("Google did not return a sign-in credential");
+                    setErrorMessage(
+                      "Google did not return a sign-in credential",
+                    );
                     return;
                   }
                   void google(response.credential);
                 }}
                 onError={() =>
-                  toast.error(
+                  setErrorMessage(
                     "Google sign-in failed. Check that this site origin is authorized for your Google OAuth client.",
                   )
                 }

@@ -10,19 +10,21 @@ import { useAuth } from "@/context/auth-context";
 const links = [
   { to: "/", label: "Home" },
   { to: "/shop", label: "Shop" },
-  { to: "/categories", label: "Categories" },
   { to: "/new-arrivals", label: "New Arrivals" },
   { to: "/contact", label: "Contact" },
 ] as const;
 
 export function SiteHeader() {
-  const { cartCount, wishlist } = useShop();
+  const { cartCount } = useShop();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const visibleLinks =
-    user?.role === "admin"
-      ? [...links, { to: "/admin" as const, label: "Admin" }]
-      : links;
+  const visibleLinks = [
+    ...links,
+    ...(user ? [{ to: "/orders" as const, label: "My Orders" }] : []),
+    ...(user?.role === "admin"
+      ? [{ to: "/admin" as const, label: "Admin" }]
+      : []),
+  ];
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">

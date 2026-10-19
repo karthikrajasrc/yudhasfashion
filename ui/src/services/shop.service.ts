@@ -1,177 +1,9 @@
-/** Frontend-only catalogue service. Replace this local data with an API client later. */
-import {
-  districts,
-  freeDeliveryThreshold,
-  type Category,
-  type Product,
-} from "@/data/catalog";
-import { effectivePrice } from "@/lib/format";
+import type { Category, Product } from "@/data/catalog";
+import { readApiResponse } from "@/services/api-response";
 
-const categories: Category[] = [
-  {
-    id: "jewellery",
-    name: "Jewellery",
-    slug: "jewellery",
-    description: "Hand-finished gold jewellery",
-    image: "/images/p-necklace.jpg",
-    parent: null,
-    displayOrder: 1,
-    status: "active",
-  },
-  {
-    id: "earrings",
-    name: "Earrings",
-    slug: "earrings",
-    description: "Statement earrings",
-    image: "/images/p-earrings.jpg",
-    parent: "jewellery",
-    displayOrder: 1,
-    status: "active",
-  },
-  {
-    id: "necklaces",
-    name: "Necklaces",
-    slug: "necklaces",
-    description: "Temple-inspired necklaces",
-    image: "/images/p-necklace.jpg",
-    parent: "jewellery",
-    displayOrder: 2,
-    status: "active",
-  },
-  {
-    id: "bangles",
-    name: "Bangles",
-    slug: "bangles",
-    description: "Gold-finish bangles",
-    image: "/images/p-bangles.jpg",
-    parent: "jewellery",
-    displayOrder: 3,
-    status: "active",
-  },
-  {
-    id: "sarees",
-    name: "Silk Sarees",
-    slug: "sarees",
-    description: "Premium silk sarees",
-    image: "/images/p-saree.jpg",
-    parent: null,
-    displayOrder: 2,
-    status: "active",
-  },
-];
-
-const products: Product[] = [
-  {
-    id: "p-earrings",
-    name: "Ruby Jhumka Earrings",
-    slug: "ruby-jhumka-earrings",
-    sku: "YF-EAR-001",
-    categorySlug: "jewellery",
-    subcategorySlug: "earrings",
-    shortDescription: "Handcrafted ruby and pearl jhumkas",
-    description:
-      "A festive pair of handcrafted jhumkas with ruby tones and a pearl fringe.",
-    images: ["/images/p-earrings.jpg"],
-    price: 2499,
-    salePrice: 1999,
-    stock: 12,
-    brand: "Yudhas",
-    material: "Gold finish",
-    sizes: ["One size"],
-    colors: ["Ruby"],
-    weight: "42g",
-    rating: 4.9,
-    reviewCount: 38,
-    featured: true,
-    newArrival: true,
-    soldCount: 184,
-    createdAt: "2026-08-20",
-    specifications: [],
-  },
-  {
-    id: "p-bangles",
-    name: "Polki Layered Bangles",
-    slug: "polki-layered-bangles",
-    sku: "YF-BAN-002",
-    categorySlug: "jewellery",
-    subcategorySlug: "bangles",
-    shortDescription: "A luminous set of stone-studded bangles",
-    description:
-      "Layered gold-finish bangles designed to catch the light at every celebration.",
-    images: ["/images/p-bangles.jpg"],
-    price: 3299,
-    salePrice: null,
-    stock: 8,
-    brand: "Yudhas",
-    material: "Gold finish",
-    sizes: ["2.4", "2.6", "2.8"],
-    colors: ["Gold"],
-    weight: "58g",
-    rating: 4.8,
-    reviewCount: 24,
-    featured: true,
-    newArrival: false,
-    soldCount: 129,
-    createdAt: "2026-07-18",
-    specifications: [],
-  },
-  {
-    id: "p-necklace",
-    name: "Temple Sun Necklace",
-    slug: "temple-sun-necklace",
-    sku: "YF-NEC-003",
-    categorySlug: "jewellery",
-    subcategorySlug: "necklaces",
-    shortDescription: "A classic temple-inspired statement necklace",
-    description:
-      "Intricate sun motifs and a graceful pendant bring a ceremonial finish to this heirloom-inspired necklace.",
-    images: ["/images/p-necklace.jpg"],
-    price: 5499,
-    salePrice: 4499,
-    stock: 5,
-    brand: "Yudhas",
-    material: "Gold finish",
-    sizes: ["One size"],
-    colors: ["Gold"],
-    weight: "86g",
-    rating: 5,
-    reviewCount: 17,
-    featured: true,
-    newArrival: true,
-    soldCount: 76,
-    createdAt: "2026-08-29",
-    specifications: [],
-  },
-  {
-    id: "p-saree",
-    name: "Magenta Kanjivaram Silk",
-    slug: "magenta-kanjivaram-silk",
-    sku: "YF-SAR-004",
-    categorySlug: "sarees",
-    subcategorySlug: null,
-    shortDescription: "Pure silk with a rose-gold zari border",
-    description:
-      "A vivid magenta silk saree with a luminous zari border for weddings and milestone celebrations.",
-    images: ["/images/p-saree.jpg"],
-    price: 8999,
-    salePrice: 7499,
-    stock: 4,
-    brand: "Yudhas",
-    material: "Pure silk",
-    sizes: ["Free size"],
-    colors: ["Magenta"],
-    weight: "620g",
-    rating: 4.9,
-    reviewCount: 31,
-    featured: false,
-    newArrival: true,
-    soldCount: 94,
-    createdAt: "2026-08-26",
-    specifications: [],
-  },
-];
-
-const loadCatalog = async () => ({ products, categories });
+const apiUrl = (
+  import.meta.env["VITE_API_URL"] ?? "http://localhost:4000"
+).replace(/\/$/, "");
 
 export type ProductQuery = {
   category?: string;
@@ -183,7 +15,6 @@ export type ProductQuery = {
   inStockOnly?: boolean;
   size?: string;
   color?: string;
-  material?: string;
   sort?:
     | "newest"
     | "price-asc"
@@ -193,152 +24,141 @@ export type ProductQuery = {
     | "discount";
   page?: number;
   perPage?: number;
+  featuredOnly?: boolean;
+  newArrivalsOnly?: boolean;
 };
 
-export const getCategories = async (): Promise<Category[]> =>
-  (await loadCatalog()).categories;
+async function getJson<T>(path: string): Promise<T> {
+  return readApiResponse(fetch(`${apiUrl}${path}`), "Unable to load products");
+}
+
+function withImageOrigin(product: Product): Product {
+  const image = product.images[0];
+  if (!image || image.startsWith("http")) return product;
+  return {
+    ...product,
+    images: [`${apiUrl}${image}`, ...product.images.slice(1)],
+  };
+}
+
+function toProductListQuery(query: ProductQuery) {
+  const params = new URLSearchParams();
+  if (query.category) params.set("category", query.category);
+  if (query.subcategory) params.set("subcategory", query.subcategory);
+  if (query.search) params.set("q", query.search);
+  if (query.minPrice !== undefined)
+    params.set("minPrice", String(query.minPrice));
+  if (query.maxPrice !== undefined)
+    params.set("maxPrice", String(query.maxPrice));
+  if (query.discountedOnly) params.set("discounted", "true");
+  if (query.inStockOnly) params.set("inStock", "true");
+  if (query.size) params.set("size", query.size);
+  if (query.color) params.set("color", query.color);
+  if (query.featuredOnly) params.set("featured", "true");
+  if (query.newArrivalsOnly) params.set("newArrival", "true");
+  if (query.sort) params.set("sort", query.sort);
+  if (query.page) params.set("page", String(query.page));
+  if (query.perPage) params.set("perPage", String(query.perPage));
+  return params;
+}
+
+export const getCategories = async (): Promise<Category[]> => {
+  const result = await getJson<{ categories: Category[] }>("/api/categories");
+  return result.categories;
+};
 
 export const getCategoryTree = async () => {
   const all = await getCategories();
   return all
-    .filter((c) => !c.parent)
     .sort((a, b) => a.displayOrder - b.displayOrder)
-    .map((parent) => ({
-      ...parent,
-      children: all
-        .filter((c) => c.parent === parent.slug)
-        .sort((a, b) => a.displayOrder - b.displayOrder),
-    }));
+    .map((category) => ({ ...category, children: [] as Category[] }));
 };
 
 export const listProducts = async (query: ProductQuery = {}) => {
-  const {
-    category,
-    subcategory,
-    search,
-    minPrice = 0,
-    maxPrice = Number.MAX_SAFE_INTEGER,
-    discountedOnly,
-    inStockOnly,
-    size,
-    color,
-    material,
-    sort = "newest",
-    page = 1,
-    perPage = 9,
-  } = query;
-
-  const { products } = await loadCatalog();
-
-  let items = products.filter((p) => {
-    const price = effectivePrice(p.price, p.salePrice);
-    if (
-      category &&
-      p.categorySlug !== category &&
-      p.subcategorySlug !== category
-    )
-      return false;
-    if (subcategory && p.subcategorySlug !== subcategory) return false;
-    if (
-      search &&
-      !`${p.name} ${p.shortDescription}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
-    )
-      return false;
-    if (price < minPrice || price > maxPrice) return false;
-    if (discountedOnly && !p.salePrice) return false;
-    if (inStockOnly && p.stock <= 0) return false;
-    if (size && !p.sizes.includes(size)) return false;
-    if (color && !p.colors.includes(color)) return false;
-    if (material && !p.material.toLowerCase().includes(material.toLowerCase()))
-      return false;
-    return true;
-  });
-
-  items = [...items].sort((a, b) => {
-    const pa = effectivePrice(a.price, a.salePrice);
-    const pb = effectivePrice(b.price, b.salePrice);
-    switch (sort) {
-      case "price-asc":
-        return pa - pb;
-      case "price-desc":
-        return pb - pa;
-      case "popular":
-        return b.rating * b.reviewCount - a.rating * a.reviewCount;
-      case "best-selling":
-        return b.soldCount - a.soldCount;
-      case "discount":
-        return (
-          (b.salePrice ? (b.price - b.salePrice) / b.price : 0) -
-          (a.salePrice ? (a.price - a.salePrice) / a.price : 0)
-        );
-      default:
-        return b.createdAt.localeCompare(a.createdAt);
-    }
-  });
-
-  const total = items.length;
-  const start = (page - 1) * perPage;
-  return {
-    items: items.slice(start, start + perPage),
-    total,
-    page,
-    perPage,
-    pages: Math.max(1, Math.ceil(total / perPage)),
-  };
+  const params = toProductListQuery(query);
+  const search = params.size ? `?${params.toString()}` : "";
+  const result = await getJson<{
+    items: Product[];
+    total: number;
+    page: number;
+    perPage: number;
+    pages: number;
+  }>(`/api/products${search}`);
+  return { ...result, items: result.items.map(withImageOrigin) };
 };
 
 export const getProductBySlug = async (
   slug: string,
-): Promise<Product | undefined> =>
-  (await loadCatalog()).products.find((p) => p.slug === slug);
-
-export const getProductsByIds = async (ids: string[]): Promise<Product[]> => {
-  const { products } = await loadCatalog();
-  return ids
-    .map((id) => products.find((p) => p.id === id))
-    .filter(Boolean) as Product[];
+): Promise<Product | undefined> => {
+  try {
+    const result = await getJson<{ product: Product }>(
+      `/api/products/${encodeURIComponent(slug)}`,
+    );
+    return withImageOrigin(result.product);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Product not found") {
+      return undefined;
+    }
+    throw error;
+  }
 };
 
-export const getRelatedProducts = async (slug: string) => {
-  const { products } = await loadCatalog();
-  const product = products.find((p) => p.slug === slug);
-  if (!product) return [];
-  return products
-    .filter(
-      (p) => p.id !== product.id && p.categorySlug === product.categorySlug,
-    )
-    .slice(0, 4);
+export const getRelatedProducts = async (slug: string): Promise<Product[]> => {
+  const result = await getJson<{ products: Product[] }>(
+    `/api/products/${encodeURIComponent(slug)}/related`,
+  );
+  return result.products.map(withImageOrigin);
 };
 
 export const getHomeCollections = async () => {
-  const { products } = await loadCatalog();
+  const [newArrivals, trending, onSale] = await Promise.all([
+    listProducts({ newArrivalsOnly: true, perPage: 4 }),
+    listProducts({ featuredOnly: true, perPage: 4 }),
+    listProducts({ discountedOnly: true, perPage: 4 }),
+  ]);
   return {
-    newArrivals: products.filter((p) => p.newArrival).slice(0, 4),
-    trending: products.filter((p) => p.featured).slice(0, 4),
-    onSale: products.filter((p) => p.salePrice).slice(0, 4),
+    newArrivals: newArrivals.items,
+    trending: trending.items,
+    onSale: onSale.items,
   };
 };
 
-export const getDistricts = async () => districts;
+export const getCategoryProducts = async (categorySlugs: string[]) => {
+  const entries = await Promise.all(
+    categorySlugs.map(async (slug) => {
+      const result = await listProducts({
+        category: slug,
+        perPage: 8,
+        sort: "newest",
+      });
+      return [slug, result.items] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as Record<string, Product[]>;
+};
 
-/** Delivery charge by district, with the free-delivery threshold applied. */
-export const getDeliveryQuote = async (district: string, subtotal: number) => {
-  const match = districts.find((d) => d.name === district);
-  if (!match)
-    return {
-      district: null,
-      charge: 0,
-      freeDelivery: false,
-      threshold: freeDeliveryThreshold,
-    };
-  const freeDelivery = subtotal >= freeDeliveryThreshold;
+export type DeliverySettings = {
+  deliveryCharge: number | null;
+  freeDeliveryThreshold: number;
+};
+
+export const getDeliverySettings = async (): Promise<DeliverySettings> => {
+  const result = await getJson<{ settings: DeliverySettings }>(
+    "/api/delivery-settings",
+  );
+  return result.settings;
+};
+
+export const getDeliveryQuote = (
+  subtotal: number,
+  settings: DeliverySettings | undefined,
+) => {
+  if (!settings || settings.deliveryCharge === null) return null;
+  const freeDelivery = subtotal >= settings.freeDeliveryThreshold;
   return {
-    district: match.name,
-    charge: freeDelivery ? 0 : match.charge,
+    charge: freeDelivery ? 0 : settings.deliveryCharge,
     freeDelivery,
-    threshold: freeDeliveryThreshold,
+    threshold: settings.freeDeliveryThreshold,
   };
 };
 
@@ -359,13 +179,16 @@ export const validateCoupon = async (code: string, subtotal: number) => {
       maxDiscount: 500,
     },
   ];
-  const coupon = coupons.find((c) => c.code === code.trim().toUpperCase());
+  const coupon = coupons.find(
+    (item) => item.code === code.trim().toUpperCase(),
+  );
   if (!coupon) return { ok: false as const, message: "Invalid coupon code" };
-  if (subtotal < coupon.minOrder)
+  if (subtotal < coupon.minOrder) {
     return {
       ok: false as const,
       message: `Valid on orders above ₹${coupon.minOrder.toLocaleString("en-IN")}`,
     };
+  }
   const raw =
     coupon.type === "percent" ? (subtotal * coupon.value) / 100 : coupon.value;
   return {

@@ -1,7 +1,15 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Heart, Minus, Plus, Share2, ShieldCheck, Star, Truck } from "lucide-react";
+import {
+  ArrowLeft,
+  Minus,
+  Plus,
+  Share2,
+  ShieldCheck,
+  Star,
+  Truck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { GoldButton, Section } from "@/components/section";
 import { ProductCard } from "@/components/product-card";
@@ -9,7 +17,7 @@ import { useShop } from "@/context/shop-context";
 import { discountPercent, effectivePrice, formatINR } from "@/lib/format";
 import {
   getDeliveryQuote,
-  getDistricts,
+  getDeliverySettings,
   getProductBySlug,
   getRelatedProducts,
 } from "@/services/shop.service";
@@ -23,16 +31,21 @@ export const Route = createFileRoute("/_authenticated/product/$slug")({
   },
   head: ({ loaderData }) => {
     if (!loaderData) {
-      return { meta: [{ title: "Unavailable | YUDHAS FASHION" }, { name: "robots", content: "noindex" }] };
+      return {
+        meta: [
+          { title: "Unavailable | YUDHAS FASHION" },
+          { name: "robots", content: "noindex" },
+        ],
+      };
     }
     const { product } = loaderData;
     const price = effectivePrice(product.price, product.salePrice);
     return {
       meta: [
         { title: `${product.name} — ${formatINR(price)} | YUDHAS FASHION` },
-        { name: "description", content: product.shortDescription },
+        { name: "description", content: product.description },
         { property: "og:title", content: `${product.name} | YUDHAS FASHION` },
-        { property: "og:description", content: product.shortDescription },
+        { property: "og:description", content: product.description },
       ],
     };
   },
@@ -41,27 +54,25 @@ export const Route = createFileRoute("/_authenticated/product/$slug")({
 
 function ProductDetail() {
   const { product } = Route.useLoaderData();
-  const { addToCart, toggleWishlist, isWishlisted } = useShop();
+  const { addToCart } = useShop();
   const [image, setImage] = useState(0);
   const [size, setSize] = useState(product.sizes[0] ?? "");
   const [color, setColor] = useState(product.colors[0] ?? "");
   const [qty, setQty] = useState(1);
-  const [district, setDistrict] = useState("");
 
   const off = discountPercent(product.price, product.salePrice);
   const price = effectivePrice(product.price, product.salePrice);
   const saved = product.price - price;
 
-  const { data: districts } = useQuery({ queryKey: ["districts"], queryFn: getDistricts });
+  const deliverySettingsQuery = useQuery({
+    queryKey: ["delivery-settings"],
+    queryFn: getDeliverySettings,
+  });
   const { data: related } = useQuery({
     queryKey: ["related", product.slug],
     queryFn: () => getRelatedProducts(product.slug),
   });
-  const { data: quote } = useQuery({
-    queryKey: ["delivery", district, price * qty],
-    queryFn: () => getDeliveryQuote(district, price * qty),
-    enabled: district !== "",
-  });
+  const quote = getDeliveryQuote(price * qty, deliverySettingsQuery.data);
 
   useEffect(() => {
     setImage(0);
@@ -79,15 +90,13 @@ function ProductDetail() {
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
-        <nav className="mb-8 text-[0.68rem] tracking-[0.16em] text-muted-foreground uppercase">
-          <Link to="/" className="hover:text-primary">Home</Link>
-          <span className="mx-2">/</span>
-          <Link to="/shop" search={{ category: product.categorySlug }} className="hover:text-primary">
-            {product.categorySlug}
-          </Link>
-          <span className="mx-2">/</span>
-          <span className="text-foreground">{product.name}</span>
-        </nav>
+        <Link
+          to="/shop"
+          className="mb-8 inline-flex min-h-10 items-center gap-2 border border-border px-4 py-2 text-xs tracking-[0.16em] text-foreground uppercase transition-colors hover:border-primary hover:text-primary"
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </Link>
 
         <div className="grid gap-10 lg:grid-cols-2">
           <div className="space-y-4">
@@ -110,7 +119,14 @@ function ProductDetail() {
                     i === image ? "border-primary" : "border-border",
                   )}
                 >
-                  <img src={img} alt="" loading="lazy" width={900} height={1100} className="aspect-4/5 object-cover" />
+                  <img
+                    src={img}
+                    alt=""
+                    loading="lazy"
+                    width={900}
+                    height={1100}
+                    className="aspect-4/5 object-cover"
+                  />
                 </button>
               ))}
             </div>
@@ -118,24 +134,16 @@ function ProductDetail() {
 
           <div className="space-y-7">
             <div>
-              <p className="eyebrow">{product.brand}</p>
-              <h1 className="mt-3 text-3xl leading-tight sm:text-4xl">{product.name}</h1>
-              <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="flex text-primary">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className={cn("size-4", i < Math.round(product.rating) && "fill-current")}
-                    />
-                  ))}
-                </span>
-                {product.rating} · {product.reviewCount} reviews
-              </div>
+              <h1 className="mt-3 text-3xl leading-tight sm:text-4xl">
+                {product.name}
+              </h1>
             </div>
 
             <div className="space-y-2">
               <div className="flex flex-wrap items-baseline gap-3">
-                <span className="text-3xl text-primary">{formatINR(price)}</span>
+                <span className="text-3xl text-primary">
+                  {formatINR(price)}
+                </span>
                 {off > 0 && (
                   <>
                     <span className="text-lg text-muted-foreground line-through">
@@ -148,28 +156,52 @@ function ProductDetail() {
                 )}
               </div>
               {saved > 0 && (
-                <p className="text-sm text-primary">You save {formatINR(saved)} on this piece</p>
+                <p className="text-sm text-primary">
+                  You save {formatINR(saved)} on this piece
+                </p>
               )}
               <p className="text-[0.68rem] tracking-[0.18em] text-muted-foreground uppercase">
-                {product.stock > 0 ? `In stock · ${product.stock} available` : "Out of stock"} · SKU{" "}
-                {product.sku}
+                {product.stock > 0
+                  ? `In stock · ${product.stock} available`
+                  : "Out of stock"}{" "}
+                · SKU {product.sku}
               </p>
             </div>
 
-            <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {product.description}
+            </p>
 
             <div className="space-y-4">
-              <OptionRow label="Size" options={product.sizes} value={size} onChange={setSize} />
-              <OptionRow label="Colour" options={product.colors} value={color} onChange={setColor} />
+              <OptionRow
+                label="Size"
+                options={product.sizes}
+                value={size}
+                onChange={setSize}
+              />
+              <OptionRow
+                label="Colour"
+                options={product.colors}
+                value={color}
+                onChange={setColor}
+              />
 
               <div>
                 <p className="eyebrow mb-2">Quantity</p>
                 <div className="inline-flex items-center border border-border">
-                  <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2.5" aria-label="Decrease">
+                  <button
+                    onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    className="px-3 py-2.5"
+                    aria-label="Decrease"
+                  >
                     <Minus className="size-4" />
                   </button>
                   <span className="w-10 text-center text-sm">{qty}</span>
-                  <button onClick={() => setQty((q) => q + 1)} className="px-3 py-2.5" aria-label="Increase">
+                  <button
+                    onClick={() => setQty((q) => q + 1)}
+                    className="px-3 py-2.5"
+                    aria-label="Increase"
+                  >
                     <Plus className="size-4" />
                   </button>
                 </div>
@@ -221,13 +253,6 @@ function ProductDetail() {
                 </button>
               </Link>
               <button
-                onClick={() => toggleWishlist(product.id)}
-                aria-label="Wishlist"
-                className="grid size-11 place-items-center border border-border text-primary"
-              >
-                <Heart className={cn("size-4", isWishlisted(product.id) && "fill-current")} />
-              </button>
-              <button
                 onClick={() => {
                   navigator.clipboard?.writeText(window.location.href);
                   toast.success("Link copied");
@@ -241,44 +266,31 @@ function ProductDetail() {
 
             <div className="glass-panel space-y-3 p-5">
               <p className="eyebrow flex items-center gap-2">
-                <Truck className="size-4" /> Delivery availability
+                <Truck className="size-4" /> Delivery
               </p>
-              <select
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                className="w-full border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-              >
-                <option value="">Select your district</option>
-                {(districts ?? []).map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              {quote?.district && (
+              {quote ? (
                 <p className="text-sm text-muted-foreground">
-                  Delivery to {quote.district}:{" "}
+                  Delivery charge:{" "}
                   <span className="text-primary">
                     {quote.freeDelivery ? "Free" : formatINR(quote.charge)}
                   </span>{" "}
                   · Estimated arrival {eta}
                 </p>
+              ) : (
+                <p
+                  role={deliverySettingsQuery.isError ? "alert" : undefined}
+                  className="text-sm text-muted-foreground"
+                >
+                  {deliverySettingsQuery.isError
+                    ? deliverySettingsQuery.error.message
+                    : "Delivery charge is not configured yet."}
+                </p>
               )}
-              <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                <ShieldCheck className="size-4 text-primary" /> 7-day returns · Secure checkout
-              </p>
-            </div>
-
-            <div className="border border-border">
-              <p className="eyebrow border-b border-border px-5 py-3">Specifications</p>
-              <dl className="divide-y divide-border">
-                {product.specifications.map((s) => (
-                  <div key={s.label} className="flex justify-between px-5 py-3 text-sm">
-                    <dt className="text-muted-foreground">{s.label}</dt>
-                    <dd>{s.value}</dd>
-                  </div>
-                ))}
-              </dl>
+              {quote && !quote.freeDelivery && (
+                <p className="text-xs text-muted-foreground">
+                  Free delivery on orders above {formatINR(quote.threshold)}.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -286,7 +298,7 @@ function ProductDetail() {
 
       {related && related.length > 0 && (
         <Section eyebrow="Complete the look" title="You May Also Like">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
             {related.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
@@ -319,7 +331,9 @@ function OptionRow({
             onClick={() => onChange(o)}
             className={cn(
               "border px-4 py-2 text-xs tracking-[0.12em] uppercase",
-              value === o ? "border-primary text-primary" : "border-border text-muted-foreground",
+              value === o
+                ? "border-primary text-primary"
+                : "border-border text-muted-foreground",
             )}
           >
             {o}

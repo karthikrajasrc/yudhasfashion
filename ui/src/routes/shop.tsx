@@ -5,7 +5,11 @@ import { SlidersHorizontal } from "lucide-react";
 import { z } from "zod";
 import { ProductCard } from "@/components/product-card";
 import { GoldButton } from "@/components/section";
-import { getCategoryTree, listProducts, type ProductQuery } from "@/services/shop.service";
+import {
+  getCategoryTree,
+  listProducts,
+  type ProductQuery,
+} from "@/services/shop.service";
 import { cn } from "@/lib/utils";
 
 const searchSchema = z.object({
@@ -17,7 +21,14 @@ const searchSchema = z.object({
   color: z.string().optional(),
   max: z.number().optional(),
   sort: z
-    .enum(["newest", "price-asc", "price-desc", "popular", "best-selling", "discount"])
+    .enum([
+      "newest",
+      "price-asc",
+      "price-desc",
+      "popular",
+      "best-selling",
+      "discount",
+    ])
     .optional(),
   page: z.number().optional(),
 });
@@ -35,7 +46,8 @@ export const Route = createFileRoute("/shop")({
       { property: "og:title", content: "Shop All — YUDHAS FASHION" },
       {
         property: "og:description",
-        content: "Filter handcrafted jewellery and silk sarees by category, price and discount.",
+        content:
+          "Filter handcrafted jewellery and silk sarees by category, price and discount.",
       },
     ],
   }),
@@ -68,16 +80,28 @@ function Shop() {
     page: search.page ?? 1,
   };
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error } = useQuery({
     queryKey: ["products", query],
     queryFn: () => listProducts(query),
   });
-  const { data: tree } = useQuery({ queryKey: ["category-tree"], queryFn: getCategoryTree });
+  const { data: tree } = useQuery({
+    queryKey: ["category-tree"],
+    queryFn: getCategoryTree,
+  });
 
   const update = (patch: Partial<z.infer<typeof searchSchema>>) =>
     navigate({ to: ".", search: (prev) => ({ ...prev, ...patch, page: 1 }) });
 
-  const colors = ["Gold", "Rani Pink", "Antique Gold", "Champagne", "Wine", "Magenta", "Emerald", "Ivory"];
+  const colors = [
+    "Gold",
+    "Rani Pink",
+    "Antique Gold",
+    "Champagne",
+    "Wine",
+    "Magenta",
+    "Emerald",
+    "Ivory",
+  ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
@@ -100,7 +124,9 @@ function Shop() {
         </p>
         <select
           value={search.sort ?? "newest"}
-          onChange={(e) => update({ sort: e.target.value as ProductQuery["sort"] })}
+          onChange={(e) =>
+            update({ sort: e.target.value as ProductQuery["sort"] })
+          }
           className="border border-input bg-background px-4 py-2.5 text-xs tracking-[0.14em] uppercase outline-none focus:border-primary"
         >
           {Object.entries(sortLabels).map(([value, label]) => (
@@ -112,7 +138,9 @@ function Shop() {
       </div>
 
       <div className="grid gap-10 lg:grid-cols-[240px_1fr]">
-        <aside className={cn("space-y-8", filtersOpen ? "block" : "hidden lg:block")}>
+        <aside
+          className={cn("space-y-8", filtersOpen ? "block" : "hidden lg:block")}
+        >
           <FilterBlock title="Search">
             <input
               defaultValue={search.q ?? ""}
@@ -125,7 +153,10 @@ function Shop() {
           <FilterBlock title="Category">
             <button
               onClick={() => update({ category: undefined })}
-              className={cn("block text-sm", !search.category ? "text-primary" : "text-muted-foreground")}
+              className={cn(
+                "block text-sm",
+                !search.category ? "text-primary" : "text-muted-foreground",
+              )}
             >
               All
             </button>
@@ -135,7 +166,9 @@ function Shop() {
                   onClick={() => update({ category: parent.slug })}
                   className={cn(
                     "block text-sm",
-                    search.category === parent.slug ? "text-primary" : "text-muted-foreground",
+                    search.category === parent.slug
+                      ? "text-primary"
+                      : "text-muted-foreground",
                   )}
                 >
                   {parent.name}
@@ -147,7 +180,9 @@ function Shop() {
                       onClick={() => update({ category: child.slug })}
                       className={cn(
                         "block text-xs",
-                        search.category === child.slug ? "text-primary" : "text-muted-foreground",
+                        search.category === child.slug
+                          ? "text-primary"
+                          : "text-muted-foreground",
                       )}
                     >
                       {child.name}
@@ -178,7 +213,9 @@ function Shop() {
               {colors.map((c) => (
                 <button
                   key={c}
-                  onClick={() => update({ color: search.color === c ? undefined : c })}
+                  onClick={() =>
+                    update({ color: search.color === c ? undefined : c })
+                  }
                   className={cn(
                     "border px-2.5 py-1 text-[0.65rem] tracking-[0.12em] uppercase",
                     search.color === c
@@ -215,15 +252,25 @@ function Shop() {
         </aside>
 
         <div>
-          {isPending ? (
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {isError ? (
+            <p
+              role="alert"
+              className="border border-destructive/40 p-5 text-sm text-destructive"
+            >
+              {error.message}
+            </p>
+          ) : isPending ? (
+            <div className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="aspect-4/5 animate-pulse border border-border bg-card" />
+                <div
+                  key={i}
+                  className="aspect-4/5 animate-pulse border border-border bg-card"
+                />
               ))}
             </div>
           ) : data && data.items.length > 0 ? (
             <>
-              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-3">
                 {data.items.map((p) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
@@ -233,7 +280,12 @@ function Shop() {
                   {Array.from({ length: data.pages }).map((_, i) => (
                     <button
                       key={i}
-                      onClick={() => navigate({ to: ".", search: (prev) => ({ ...prev, page: i + 1 }) })}
+                      onClick={() =>
+                        navigate({
+                          to: ".",
+                          search: (prev) => ({ ...prev, page: i + 1 }),
+                        })
+                      }
                       className={cn(
                         "size-10 border text-sm",
                         (search.page ?? 1) === i + 1
@@ -249,9 +301,27 @@ function Shop() {
             </>
           ) : (
             <div className="border border-border p-16 text-center">
-              <h2 className="text-2xl">No pieces match your filters</h2>
+              <h2 className="text-2xl">
+                {data?.total === 0 &&
+                !search.category &&
+                !search.q &&
+                !search.max &&
+                !search.color &&
+                !search.discounted &&
+                !search.inStock
+                  ? "Our collection is being updated"
+                  : "No pieces match your filters"}
+              </h2>
               <p className="mt-3 text-sm text-muted-foreground">
-                Try widening your price range or clearing a filter.
+                {data?.total === 0 &&
+                !search.category &&
+                !search.q &&
+                !search.max &&
+                !search.color &&
+                !search.discounted &&
+                !search.inStock
+                  ? "Please check back soon."
+                  : "Try widening your price range or clearing a filter."}
               </p>
             </div>
           )}
@@ -261,7 +331,13 @@ function Shop() {
   );
 }
 
-function FilterBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function FilterBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-3">
       <h3 className="eyebrow">{title}</h3>

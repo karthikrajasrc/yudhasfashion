@@ -9,10 +9,14 @@ export const Route = createFileRoute("/new-arrivals")({
       { title: "New Arrivals | YUDHAS FASHION" },
       {
         name: "description",
-        content: "The latest jewellery and silk drops from the Yudhas Fashion atelier in Chennai.",
+        content:
+          "The latest jewellery and silk drops from the Yudhas Fashion atelier in Chennai.",
       },
       { property: "og:title", content: "New Arrivals | YUDHAS FASHION" },
-      { property: "og:description", content: "Fresh gold-finish jewellery and silk sarees." },
+      {
+        property: "og:description",
+        content: "Fresh gold-finish jewellery and silk sarees.",
+      },
     ],
   }),
   component: NewArrivals,
@@ -21,7 +25,8 @@ export const Route = createFileRoute("/new-arrivals")({
 function NewArrivals() {
   const { data } = useQuery({
     queryKey: ["products", "new"],
-    queryFn: () => listProducts({ sort: "newest", perPage: 12 }),
+    queryFn: () =>
+      listProducts({ sort: "newest", newArrivalsOnly: true, perPage: 12 }),
   });
 
   return (
@@ -31,11 +36,17 @@ function NewArrivals() {
         <h1 className="mt-3 text-4xl sm:text-5xl">New Arrivals</h1>
         <div className="hairline mx-auto mt-6 w-24" />
       </header>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {(data?.items ?? []).map((p) => (
-          <ProductCard key={p.id} product={p} />
-        ))}
-      </div>
+      {data?.items.length ? (
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
+          {data.items.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      ) : (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          No new arrivals yet. Please check back soon.
+        </p>
+      )}
     </div>
   );
 }

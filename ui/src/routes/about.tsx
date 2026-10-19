@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import heroImage from "@/assets/hero.jpg";
 import logo from "@/assets/logo.png";
 import { GoldButton, Section } from "@/components/section";
 
@@ -15,7 +14,8 @@ export const Route = createFileRoute("/about")({
       { property: "og:title", content: "Our Story | YUDHAS FASHION" },
       {
         property: "og:description",
-        content: "Chennai-born luxury jewellery and silk, crafted by artisan families.",
+        content:
+          "Chennai-born luxury jewellery and silk, crafted by artisan families.",
       },
     ],
   }),
@@ -25,22 +25,22 @@ export const Route = createFileRoute("/about")({
 function About() {
   return (
     <>
-      <section className="relative isolate">
-        <img
-          src={heroImage}
-          alt="Yudhas Fashion campaign"
-          width={1600}
-          height={1200}
-          className="absolute inset-0 size-full object-cover"
-        />
-        <div className="absolute inset-0 bg-background/80" />
-        <div className="relative mx-auto max-w-3xl px-4 py-28 text-center">
-          <img src={logo} alt="YUDHAS FASHION" width={1152} height={576} className="mx-auto h-14 w-auto" />
-          <h1 className="mt-8 text-4xl sm:text-5xl">Craft Kept in the Family</h1>
+      <section className="relative isolate bg-gradient-to-br from-card via-background to-secondary">
+        <div className="mx-auto max-w-3xl px-4 py-28 text-center">
+          <img
+            src={logo}
+            alt="YUDHAS FASHION"
+            width={1152}
+            height={576}
+            className="mx-auto h-14 w-auto"
+          />
+          <h1 className="mt-8 text-4xl sm:text-5xl">
+            Craft Kept in the Family
+          </h1>
           <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
-            Since our first workshop in Chennai, Yudhas Fashion has worked with the same artisan
-            families — goldsmiths who cast temple motifs by hand and weavers who still count zari
-            threads on wooden looms.
+            Since our first workshop in Chennai, Yudhas Fashion has worked with
+            the same artisan families — goldsmiths who cast temple motifs by
+            hand and weavers who still count zari threads on wooden looms.
           </p>
         </div>
       </section>
@@ -63,13 +63,18 @@ function About() {
           ].map((v) => (
             <div key={v.title} className="glass-panel p-7">
               <h3 className="text-2xl">{v.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{v.body}</p>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                {v.body}
+              </p>
             </div>
           ))}
         </div>
       </Section>
 
-      <Section className="border-t border-border text-center" title="Bring Home a Piece">
+      <Section
+        className="border-t border-border text-center"
+        title="Bring Home a Piece"
+      >
         <Link to="/shop" className="inline-flex">
           <GoldButton>Shop the collection</GoldButton>
         </Link>

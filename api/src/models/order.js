@@ -4,6 +4,9 @@ const orderItemSchema = new mongoose.Schema(
   {
     productId: { type: String, required: true },
     name: { type: String, required: true, trim: true, maxlength: 160 },
+    sku: { type: String, trim: true, maxlength: 100 },
+    categorySlug: { type: String, trim: true, maxlength: 100 },
+    categoryName: { type: String, trim: true, maxlength: 80 },
     image: { type: String, required: true },
     price: { type: Number, required: true, min: 0 },
     quantity: { type: Number, required: true, min: 1, max: 99 },
@@ -36,13 +39,31 @@ const orderSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
-    district: { type: String, required: true, trim: true, maxlength: 100 },
+    district: { type: String, trim: true, maxlength: 100 },
     items: { type: [orderItemSchema], required: true },
     subtotal: { type: Number, required: true, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
     couponCode: { type: String, default: "" },
     deliveryCharge: { type: Number, required: true, min: 0 },
     total: { type: Number, required: true, min: 0 },
+    paymentMethod: {
+      type: String,
+      enum: ["cash_on_delivery", "razorpay"],
+      default: "cash_on_delivery",
+      required: true,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "created", "authorized", "captured", "failed"],
+      default: "pending",
+      required: true,
+    },
+    razorpayOrderId: { type: String, unique: true, sparse: true },
+    razorpayPaymentId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     status: {
       type: String,
       enum: [

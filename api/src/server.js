@@ -6,8 +6,17 @@ import mongoose from "mongoose";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { authRouter } from "./routes/auth.js";
-import { productsRouter } from "./routes/products.js";
+import { productsRouter, publicProductsRouter } from "./routes/products.js";
 import { ordersRouter } from "./routes/orders.js";
+import { paymentWebhookRouter, paymentsRouter } from "./routes/payments.js";
+import {
+  adminCategoriesRouter,
+  categoriesRouter,
+} from "./routes/categories.js";
+import {
+  adminDeliverySettingsRouter,
+  deliverySettingsRouter,
+} from "./routes/delivery-settings.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
 import { ADMIN_EMAIL } from "./constants/roles.js";
 import { User } from "./models/user.js";
@@ -26,10 +35,15 @@ app.use(
     credentials: true,
   }),
 );
+app.use("/api/payments/webhook", paymentWebhookRouter);
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 app.use(
   "/uploads",
+  (_req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  },
   express.static(fileURLToPath(new URL("../uploads/", import.meta.url)), {
     fallthrough: false,
     dotfiles: "deny",
@@ -38,7 +52,13 @@ app.use(
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", authRouter);
+app.use("/api/categories", categoriesRouter);
+app.use("/api/admin/categories", adminCategoriesRouter);
+app.use("/api/delivery-settings", deliverySettingsRouter);
+app.use("/api/admin/delivery-settings", adminDeliverySettingsRouter);
+app.use("/api/products", publicProductsRouter);
 app.use("/api/admin/products", productsRouter);
+app.use("/api/payments", paymentsRouter);
 app.use("/api/orders", ordersRouter);
 app.use(notFound);
 app.use(errorHandler);

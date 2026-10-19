@@ -23,35 +23,53 @@ export type CartLine = {
 
 type ShopState = {
   cart: CartLine[];
-  wishlist: string[];
   ready: boolean;
   addToCart: (line: Omit<CartLine, "quantity">, quantity?: number) => void;
   removeFromCart: (productId: string, size?: string, color?: string) => void;
-  setQuantity: (productId: string, quantity: number, size?: string, color?: string) => void;
+  setQuantity: (
+    productId: string,
+    quantity: number,
+    size?: string,
+    color?: string,
+  ) => void;
   clearCart: () => void;
-  toggleWishlist: (productId: string) => void;
-  isWishlisted: (productId: string) => boolean;
   cartCount: number;
 };
 
 const ShopContext = createContext<ShopState | null>(null);
 const CART_KEY = "yf.cart";
-const WISH_KEY = "yf.wishlist";
 
 const sameLine = (l: CartLine, id: string, size?: string, color?: string) =>
   l.productId === id && l.size === size && l.color === color;
 
+const isPersistedCartLine = (value: unknown): value is CartLine => {
+  if (!value || typeof value !== "object") return false;
+  const line = value as Partial<CartLine>;
+  return (
+    typeof line.productId === "string" &&
+    /^[a-f\d]{24}$/i.test(line.productId) &&
+    typeof line.name === "string" &&
+    typeof line.slug === "string" &&
+    typeof line.image === "string" &&
+    typeof line.price === "number" &&
+    (typeof line.salePrice === "number" || line.salePrice === null) &&
+    typeof line.quantity === "number"
+  );
+};
+
 export function ShopProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [wishlist, setWishlist] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     try {
       const c = localStorage.getItem(CART_KEY);
-      const w = localStorage.getItem(WISH_KEY);
-      if (c) setCart(JSON.parse(c));
-      if (w) setWishlist(JSON.parse(w));
+      if (c) {
+        const savedCart: unknown = JSON.parse(c);
+        if (Array.isArray(savedCart))
+          setCart(savedCart.filter(isPersistedCartLine));
+      }
+      localStorage.removeItem("yf.wishlist");
     } catch {
       /* ignore corrupted storage */
     }
@@ -62,35 +80,43 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     if (ready) localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart, ready]);
 
-  useEffect(() => {
-    if (ready) localStorage.setItem(WISH_KEY, JSON.stringify(wishlist));
-  }, [wishlist, ready]);
-
-  const addToCart = useCallback((line: Omit<CartLine, "quantity">, quantity = 1) => {
-    setCart((prev) => {
-      const existing = prev.find((l) => sameLine(l, line.productId, line.size, line.color));
-      if (existing) {
-        return prev.map((l) =>
-          sameLine(l, line.productId, line.size, line.color)
-            ? { ...l, quantity: l.quantity + quantity }
-            : l,
+  const addToCart = useCallback(
+    (line: Omit<CartLine, "quantity">, quantity = 1) => {
+      setCart((prev) => {
+        const existing = prev.find((l) =>
+          sameLine(l, line.productId, line.size, line.color),
         );
-      }
-      return [...prev, { ...line, quantity }];
-    });
-    toast.success("Added to bag", { description: line.name });
-  }, []);
+        if (existing) {
+          return prev.map((l) =>
+            sameLine(l, line.productId, line.size, line.color)
+              ? { ...l, quantity: l.quantity + quantity }
+              : l,
+          );
+        }
+        return [...prev, { ...line, quantity }];
+      });
+      toast.success("Added to bag", { description: line.name });
+    },
+    [],
+  );
 
-  const removeFromCart = useCallback((productId: string, size?: string, color?: string) => {
-    setCart((prev) => prev.filter((l) => !sameLine(l, productId, size, color)));
-  }, []);
+  const removeFromCart = useCallback(
+    (productId: string, size?: string, color?: string) => {
+      setCart((prev) =>
+        prev.filter((l) => !sameLine(l, productId, size, color)),
+      );
+    },
+    [],
+  );
 
   const setQuantity = useCallback(
     (productId: string, quantity: number, size?: string, color?: string) => {
       setCart((prev) =>
         prev
           .map((l) =>
-            sameLine(l, productId, size, color) ? { ...l, quantity: Math.max(1, quantity) } : l,
+            sameLine(l, productId, size, color)
+              ? { ...l, quantity: Math.max(1, quantity) }
+              : l,
           )
           .filter((l) => l.quantity > 0),
       );
@@ -100,28 +126,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setCart([]), []);
 
-  const toggleWishlist = useCallback((productId: string) => {
-    setWishlist((prev) => {
-      const has = prev.includes(productId);
-      toast.success(has ? "Removed from wishlist" : "Saved to wishlist");
-      return has ? prev.filter((id) => id !== productId) : [...prev, productId];
-    });
-  }, []);
-
   const value = useMemo<ShopState>(
     () => ({
       cart,
-      wishlist,
       ready,
       addToCart,
       removeFromCart,
       setQuantity,
       clearCart,
-      toggleWishlist,
-      isWishlisted: (id: string) => wishlist.includes(id),
       cartCount: cart.reduce((n, l) => n + l.quantity, 0),
     }),
-    [cart, wishlist, ready, addToCart, removeFromCart, setQuantity, clearCart, toggleWishlist],
+    [cart, ready, addToCart, removeFromCart, setQuantity, clearCart],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
