@@ -2,7 +2,7 @@ import type { NewOrder } from "@/services/admin.service";
 import { readApiResponse } from "@/services/api-response";
 
 const apiUrl = (
-  import.meta.env["VITE_API_URL"] ?? "http://localhost:4000"
+  import.meta.env["BACKEND_API_URL"] ?? "http://localhost:4000"
 ).replace(/\/$/, "");
 
 type PaymentOrderResponse = {

@@ -84,4 +84,4 @@ Set the flat delivery charge from **Admin → Delivery** before accepting orders
 
 The API never trusts a client-supplied amount. It validates the signed checkout response, checks the payment against the Razorpay order ID, INR amount and currency, and captures authorized payments server-side before marking them captured. Cash on delivery remains available separately. Do not mark an order as paid based only on the browser's checkout success callback; the callback is not trusted until the server verifies it.
 
-Set `VITE_API_URL` in the UI environment to the API origin when it is not `http://localhost:4000`. In production, serve the API over HTTPS and set `NODE_ENV=production`.
+Set `BACKEND_API_URL` in the UI environment to the API origin when it is not `http://localhost:4000`. In production, serve the API over HTTPS and set `NODE_ENV=production`.

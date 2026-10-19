@@ -466,7 +466,7 @@ function AdminPage() {
                       src={
                         product.imageUrl.startsWith("http")
                           ? product.imageUrl
-                          : `${(import.meta.env["VITE_API_URL"] ?? "http://localhost:4000").replace(/\/$/, "")}${product.imageUrl}`
+                          : `${(import.meta.env["BACKEND_API_URL"] ?? "http://localhost:4000").replace(/\/$/, "")}${product.imageUrl}`
                       }
                       alt=""
                       className="size-20 shrink-0 object-cover"
@@ -918,7 +918,7 @@ function EditProductDialog({
   const imageUrl = product
     ? product.imageUrl.startsWith("http")
       ? product.imageUrl
-      : `${(import.meta.env["VITE_API_URL"] ?? "http://localhost:4000").replace(/\/$/, "")}${product.imageUrl}`
+      : `${(import.meta.env["BACKEND_API_URL"] ?? "http://localhost:4000").replace(/\/$/, "")}${product.imageUrl}`
     : "";
 
   return (
