@@ -48,17 +48,23 @@ async function synchronizeUserRole(user) {
   return user;
 }
 
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: config.isProduction,
+    sameSite: config.isProduction ? "none" : "lax",
+    path: "/",
+  };
+}
+
 function issueSession(res, user) {
   const token = jwt.sign({}, config.jwtSecret, {
     subject: user.id,
     expiresIn: "7d",
   });
   res.cookie("yf_session", token, {
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: "lax",
+    ...sessionCookieOptions(),
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/",
   });
   return res.json({ user: publicUser(user) });
 }
@@ -203,12 +209,7 @@ authRouter.get("/me", requireAuth, async (req, res, next) => {
   try {
     const user = await User.findById(req.authUserId);
     if (!user) {
-      res.clearCookie("yf_session", {
-        httpOnly: true,
-        secure: config.isProduction,
-        sameSite: "lax",
-        path: "/",
-      });
+      res.clearCookie("yf_session", sessionCookieOptions());
       return res.status(401).json({ message: "Authentication required" });
     }
     await synchronizeUserRole(user);
@@ -219,11 +220,6 @@ authRouter.get("/me", requireAuth, async (req, res, next) => {
 });
 
 authRouter.post("/logout", (_req, res) => {
-  res.clearCookie("yf_session", {
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: "lax",
-    path: "/",
-  });
+  res.clearCookie("yf_session", sessionCookieOptions());
   return res.json({ message: "Signed out" });
 });

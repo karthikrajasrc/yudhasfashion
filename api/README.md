@@ -21,6 +21,8 @@ For Razorpay, add `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to `api/.env`. The
 
 For Google sign-in, set `GOOGLE_CLIENT_ID` to the same OAuth client ID used by `ui/VITE_GOOGLE_CLIENT_ID`. In Google Cloud Console, add the frontend origin (normally `http://localhost:5173`) under **Authorized JavaScript origins** for that OAuth client; Google rejects sign-in until this exact origin is listed. Set `CLIENT_ORIGINS` to the exact comma-separated frontend origins that may call this API.
 
+When the frontend and API use different hosting domains, production session cookies are configured with `SameSite=None; Secure` so credentialed browser requests can send the session. The frontend must use `credentials: "include"` and the API must allow the exact frontend origin through `CLIENT_ORIGINS`. Some browsers or privacy settings may still block third-party cookies; using a custom API subdomain under the same site as the frontend is more reliable.
+
 ## Run
 
 Start MongoDB, then run the API and frontend in separate terminals:
