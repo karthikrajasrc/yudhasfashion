@@ -23,7 +23,7 @@ npm run dev
 
 ## Authentication API
 
-Authentication is backed by the Express/MongoDB service in `../api`. Follow [the API setup guide](../api/README.md) to configure MongoDB, run the API, and set the Google OAuth client ID. The frontend uses `BACKEND_API_URL` (default `http://localhost:4000`) and `VITE_GOOGLE_CLIENT_ID` from its local `.env` file.
+Authentication is backed by the Express/MongoDB service in `../api`. Follow [the API setup guide](../api/README.md) to configure MongoDB, run the API, and set the Google OAuth client ID. Set `BACKEND_API_URL` to the API origin (defaults to `http://localhost:4000`) and configure `VITE_GOOGLE_CLIENT_ID` in the UI `.env` file. Vite explicitly injects only `BACKEND_API_URL` into the client bundle; never put secrets in this variable.
 
 Storefront products and categories are loaded from MongoDB through the API; the app does not include sample catalog records. Sign in with the admin account, open **Admin** in the navigation, create categories as needed, then add products with their images and details. If the database has no catalog data yet, storefront sections remain empty until you add it.
 

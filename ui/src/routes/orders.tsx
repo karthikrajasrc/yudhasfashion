@@ -17,7 +17,7 @@ export const Route = createFileRoute("/orders")({
 });
 
 const apiUrl = (
-  import.meta.env["BACKEND_API_URL"] ?? "http://localhost:4000"
+  import.meta.env.BACKEND_API_URL || "http://localhost:4000"
 ).replace(/\/$/, "");
 
 function OrdersPage() {
