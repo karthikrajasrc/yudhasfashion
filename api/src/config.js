@@ -19,6 +19,9 @@ export const config = {
   razorpayKeyId: process.env.RAZORPAY_KEY_ID,
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
+  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
+  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
   clientOrigins: (process.env.CLIENT_ORIGINS ?? "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())

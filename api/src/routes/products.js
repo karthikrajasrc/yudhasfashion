@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { mkdir, unlink } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -8,28 +8,19 @@ import { z } from "zod";
 import { Product } from "../models/product.js";
 import { Category } from "../models/category.js";
 import { requireAdmin, requireAuth } from "../middleware/require-auth.js";
+import {
+  deleteProductImage,
+  uploadProductImage,
+} from "../services/cloudinary.js";
 
 const uploadDirectory = fileURLToPath(
   new URL("../../uploads/", import.meta.url),
 );
-await mkdir(uploadDirectory, { recursive: true });
 
-const allowedImages = new Map([
-  ["image/jpeg", ".jpg"],
-  ["image/png", ".png"],
-  ["image/webp", ".webp"],
-]);
+const allowedImages = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: uploadDirectory,
-    filename(_req, file, callback) {
-      callback(
-        null,
-        `${randomUUID()}${allowedImages.get(file.mimetype) ?? ""}`,
-      );
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter(_req, file, callback) {
     if (!allowedImages.has(file.mimetype)) {
@@ -261,7 +252,6 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
   }
   const parsed = productSchema.safeParse(req.body);
   if (!parsed.success) {
-    await unlink(req.file.path);
     return res.status(400).json({
       message: parsed.error.issues[0]?.message ?? "Invalid product details",
     });
@@ -272,12 +262,10 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
     status: "active",
   });
   if (!category) {
-    await unlink(req.file.path);
     return res.status(400).json({ message: "Select a valid category" });
   }
   const salePrice = values.salePrice ?? null;
   if (salePrice !== null && salePrice >= values.price) {
-    await unlink(req.file.path);
     return res
       .status(400)
       .json({ message: "Sale price must be less than the regular price" });
@@ -290,27 +278,32 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
   if (!slug) {
-    await unlink(req.file.path);
     return res
       .status(400)
       .json({ message: "Product name must include letters or numbers" });
   }
   const sku =
     values.sku?.toUpperCase() || `YF-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const imageUrl = `/uploads/${req.file.filename}`;
 
+  let uploadedImage;
+  let saved = false;
   try {
+    uploadedImage = await uploadProductImage(req.file.buffer);
     const product = await Product.create({
       ...values,
       slug,
       sku,
       salePrice,
       featured: values.featured === "true",
-      imageUrl,
+      imageUrl: uploadedImage.url,
+      cloudinaryPublicId: uploadedImage.publicId,
     });
+    saved = true;
     return res.status(201).json({ product: serializeAdminProduct(product) });
   } catch (error) {
-    await unlink(req.file.path);
+    if (uploadedImage && !saved) {
+      await removeCloudinaryImage(uploadedImage.publicId);
+    }
     if (error?.code === 11000) {
       const field = error.keyPattern?.sku ? "SKU" : "name";
       return res
@@ -323,23 +316,21 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
 
 productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
-    if (req.file) await unlink(req.file.path);
     return res.status(400).json({ message: "Invalid product ID" });
   }
 
   const parsed = productSchema.safeParse(req.body);
   if (!parsed.success) {
-    if (req.file) await unlink(req.file.path);
     return res.status(400).json({
       message: parsed.error.issues[0]?.message ?? "Invalid product details",
     });
   }
 
+  let uploadedImage;
   let saved = false;
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
-      if (req.file) await unlink(req.file.path);
       return res.status(404).json({ message: "Product not found" });
     }
 
@@ -348,13 +339,11 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
       status: "active",
     });
     if (!category) {
-      if (req.file) await unlink(req.file.path);
       return res.status(400).json({ message: "Select a valid category" });
     }
 
     const salePrice = parsed.data.salePrice ?? null;
     if (salePrice !== null && salePrice >= parsed.data.price) {
-      if (req.file) await unlink(req.file.path);
       return res
         .status(400)
         .json({ message: "Sale price must be less than the regular price" });
@@ -367,16 +356,14 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
     if (!slug) {
-      if (req.file) await unlink(req.file.path);
       return res
         .status(400)
         .json({ message: "Product name must include letters or numbers" });
     }
 
     const previousImageUrl = product.imageUrl;
-    const newImageUrl = req.file
-      ? `/uploads/${req.file.filename}`
-      : previousImageUrl;
+    const previousCloudinaryPublicId = product.cloudinaryPublicId;
+    if (req.file) uploadedImage = await uploadProductImage(req.file.buffer);
 
     product.name = parsed.data.name;
     product.slug = slug;
@@ -389,27 +376,25 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
     product.featured = parsed.data.featured === "true";
     product.sizes = parsed.data.sizes;
     product.colors = parsed.data.colors;
-    product.imageUrl = newImageUrl;
+    if (uploadedImage) {
+      product.imageUrl = uploadedImage.url;
+      product.cloudinaryPublicId = uploadedImage.publicId;
+    }
 
     await product.save();
     saved = true;
 
-    if (
-      req.file &&
-      previousImageUrl !== newImageUrl &&
-      previousImageUrl.startsWith("/uploads/")
-    ) {
-      const oldFilename = path.basename(previousImageUrl);
-      await unlink(path.join(uploadDirectory, oldFilename)).catch((error) => {
-        if (error.code !== "ENOENT") {
-          console.error("Unable to remove replaced product image:", error);
-        }
-      });
+    if (uploadedImage && previousCloudinaryPublicId) {
+      await removeCloudinaryImage(previousCloudinaryPublicId);
+    } else if (uploadedImage && previousImageUrl.startsWith("/uploads/")) {
+      await removeLegacyLocalImage(previousImageUrl, "replaced");
     }
 
     return res.json({ product: serializeAdminProduct(product) });
   } catch (error) {
-    if (req.file && !saved) await unlink(req.file.path);
+    if (uploadedImage && !saved) {
+      await removeCloudinaryImage(uploadedImage.publicId);
+    }
     if (error?.code === 11000) {
       const field = error.keyPattern?.sku ? "SKU" : "name";
       return res
@@ -427,14 +412,41 @@ productsRouter.delete("/:id", async (req, res, next) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
-    if (product.imageUrl.startsWith("/uploads/")) {
-      const filename = path.basename(product.imageUrl);
-      await unlink(path.join(uploadDirectory, filename)).catch((error) => {
-        if (error.code !== "ENOENT") throw error;
-      });
+    if (product.cloudinaryPublicId) {
+      await removeCloudinaryImage(product.cloudinaryPublicId);
+    } else if (product.imageUrl.startsWith("/uploads/")) {
+      await removeLegacyLocalImage(product.imageUrl, "deleted");
     }
     return res.json({ message: "Product deleted" });
   } catch (error) {
     return next(error);
   }
 });
+
+async function removeCloudinaryImage(publicId) {
+  try {
+    const result = await deleteProductImage(publicId);
+    if (result.result !== "ok" && result.result !== "not found") {
+      console.error("Unable to remove Cloudinary product image", {
+        publicId,
+        result: result.result,
+      });
+    }
+  } catch (error) {
+    console.error("Unable to remove Cloudinary product image", {
+      publicId,
+      error,
+    });
+  }
+}
+
+async function removeLegacyLocalImage(imageUrl, action) {
+  const filename = path.basename(imageUrl);
+  try {
+    await unlink(path.join(uploadDirectory, filename));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error(`Unable to remove ${action} product image:`, error);
+    }
+  }
+}

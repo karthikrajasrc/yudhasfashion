@@ -13,6 +13,9 @@ export function errorHandler(error, _req, res, _next) {
   if (error?.message === "Upload a JPG, PNG, or WebP image (maximum 5 MB)") {
     return res.status(400).json({ message: error.message });
   }
+  if (error?.name === "CloudinaryConfigurationError") {
+    return res.status(503).json({ message: error.message });
+  }
   if (error?.type === "entity.too.large") {
     return res.status(413).json({ message: "Request body is too large" });
   }
