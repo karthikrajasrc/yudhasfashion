@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { Product } from "../models/product.js";
-import { DeliverySettings } from "../models/delivery-settings.js";
+import {
+  DeliverySettings,
+  FREE_DELIVERY_THRESHOLD,
+} from "../models/delivery-settings.js";
 import { Category } from "../models/category.js";
 
 export class OrderDetailsError extends Error {
@@ -82,7 +85,7 @@ export async function buildOrderDetails(user, input) {
     );
   }
   const deliveryCharge =
-    subtotal >= deliverySettings.freeDeliveryThreshold
+    subtotal >= FREE_DELIVERY_THRESHOLD
       ? 0
       : deliverySettings.deliveryCharge;
 

@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+export const FREE_DELIVERY_THRESHOLD = 1000;
+
 const deliverySettingsSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: "global" },
@@ -8,7 +10,7 @@ const deliverySettingsSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0,
-      default: 5000,
+      default: FREE_DELIVERY_THRESHOLD,
     },
   },
   { timestamps: true },

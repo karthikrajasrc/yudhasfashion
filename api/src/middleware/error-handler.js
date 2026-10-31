@@ -10,7 +10,7 @@ export function errorHandler(error, _req, res, _next) {
         : "Invalid image upload";
     return res.status(400).json({ message });
   }
-  if (error?.message === "Upload a JPG, PNG, or WebP image (maximum 5 MB)") {
+  if (error?.name === "InvalidProductImageError") {
     return res.status(400).json({ message: error.message });
   }
   if (error?.name === "CloudinaryConfigurationError") {

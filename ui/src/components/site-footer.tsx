@@ -59,12 +59,12 @@ export function SiteFooter() {
 
           <FooterCol title="Contact">
             <p className="flex items-center gap-2">
-              <Phone className="size-4 text-primary" /> +91 97152 25578
+              <Phone className="size-4 text-primary" /> +91 91591 25578
             </p>
             <p className="flex items-center gap-2">
               <Mail className="size-4 text-primary" /> yudhasfashion@gmail.com
             </p>
-            <p>20/175, vedhasalapuram street, Thogaimalai, kulithalai-tk, Karur-621313</p>
+            <p>Thogaimalai, kulithalai-tk, Karur-621313</p>
           </FooterCol>
         </div>
 

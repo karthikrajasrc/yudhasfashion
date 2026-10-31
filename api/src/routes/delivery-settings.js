@@ -1,16 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
-import { DeliverySettings } from "../models/delivery-settings.js";
+import {
+  DeliverySettings,
+  FREE_DELIVERY_THRESHOLD,
+} from "../models/delivery-settings.js";
 import { requireAdmin, requireAuth } from "../middleware/require-auth.js";
-
-const freeDeliveryThreshold = 5000;
 
 async function readSettings() {
   const settings = await DeliverySettings.findOne({ key: "global" }).lean();
   return {
     deliveryCharge: settings?.deliveryCharge ?? null,
-    freeDeliveryThreshold:
-      settings?.freeDeliveryThreshold ?? freeDeliveryThreshold,
+    freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
   };
 }
 
@@ -47,11 +47,11 @@ adminDeliverySettingsRouter.put("/", async (req, res, next) => {
     const settings = await DeliverySettings.findOneAndUpdate(
       { key: "global" },
       {
-        $set: { deliveryCharge: parsed.data.deliveryCharge },
-        $setOnInsert: {
-          key: "global",
-          freeDeliveryThreshold,
+        $set: {
+          deliveryCharge: parsed.data.deliveryCharge,
+          freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
         },
+        $setOnInsert: { key: "global" },
       },
       {
         new: true,
@@ -63,7 +63,7 @@ adminDeliverySettingsRouter.put("/", async (req, res, next) => {
     return res.json({
       settings: {
         deliveryCharge: settings.deliveryCharge,
-        freeDeliveryThreshold: settings.freeDeliveryThreshold,
+        freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
       },
     });
   } catch (error) {

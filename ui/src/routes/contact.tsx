@@ -56,13 +56,13 @@ function Contact() {
         </form>
 
         <div className="space-y-5">
-          <InfoCard icon={<Phone className="size-4" />} title="Call us" body="+91 97152 25578 · Mon–Sun" />
-          <InfoCard icon={<MessageCircle className="size-4" />} title="WhatsApp" body="+91 97152 25578" />
+          <InfoCard icon={<Phone className="size-4" />} title="Call us" body="+91 91591 25578 · Mon–Sun" />
+          <InfoCard icon={<MessageCircle className="size-4" />} title="WhatsApp" body="+91 91591 25578" />
           <InfoCard icon={<Mail className="size-4" />} title="Email" body="yudhasfashion@gmail.com" />
           <InfoCard
             icon={<MapPin className="size-4" />}
             title="Address"
-            body="20/175, vedhasalapuram street, Thogaimalai, kulithalai-tk, Karur-621313"
+            body="Thogaimalai, kulithalai-tk, Karur-621313"
           />
         </div>
       </div>

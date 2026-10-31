@@ -1,5 +1,25 @@
 import { v2 as cloudinary } from "cloudinary";
+import sharp from "sharp";
 import { config } from "../config.js";
+
+const supportedImageFormats = new Set([
+  "jpeg",
+  "png",
+  "webp",
+  "tiff",
+  "gif",
+  "heif",
+]);
+
+export class InvalidProductImageError extends Error {
+  constructor(options) {
+    super(
+      "Upload a valid JPEG, PNG, WebP, GIF, TIFF, AVIF, or HEIF image (maximum 5 MB)",
+      options,
+    );
+    this.name = "InvalidProductImageError";
+  }
+}
 
 export class CloudinaryConfigurationError extends Error {
   constructor() {
@@ -25,8 +45,9 @@ function configureCloudinary() {
   });
 }
 
-export function uploadProductImage(buffer) {
+export async function uploadProductImage(buffer) {
   configureCloudinary();
+  const webpBuffer = await convertProductImageToWebp(buffer);
 
   return new Promise((resolve, reject) => {
     cloudinary.uploader
@@ -46,8 +67,23 @@ export function uploadProductImage(buffer) {
           });
         },
       )
-      .end(buffer);
+      .end(webpBuffer);
   });
+}
+
+export async function convertProductImageToWebp(buffer) {
+  try {
+    const image = sharp(buffer, { failOn: "error" });
+    const metadata = await image.metadata();
+    if (!supportedImageFormats.has(metadata.format)) {
+      throw new InvalidProductImageError();
+    }
+
+    return await image.rotate().webp({ quality: 85 }).toBuffer();
+  } catch (error) {
+    if (error instanceof InvalidProductImageError) throw error;
+    throw new InvalidProductImageError({ cause: error });
+  }
 }
 
 export async function deleteProductImage(publicId) {

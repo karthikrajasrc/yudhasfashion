@@ -29,7 +29,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
       <p className="bg-wine-gradient py-2 text-center text-[0.62rem] tracking-[0.28em] text-ivory uppercase">
-        Complimentary delivery on orders above ₹5,000
+        Complimentary delivery on orders above ₹1,000
       </p>
 
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-8">

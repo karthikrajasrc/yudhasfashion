@@ -17,19 +17,9 @@ const uploadDirectory = fileURLToPath(
   new URL("../../uploads/", import.meta.url),
 );
 
-const allowedImages = new Set(["image/jpeg", "image/png", "image/webp"]);
-
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-  fileFilter(_req, file, callback) {
-    if (!allowedImages.has(file.mimetype)) {
-      return callback(
-        new Error("Upload a JPG, PNG, or WebP image (maximum 5 MB)"),
-      );
-    }
-    return callback(null, true);
-  },
 });
 
 export const productsRouter = Router();
