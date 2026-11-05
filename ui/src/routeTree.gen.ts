@@ -20,6 +20,7 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as NewArrivalsRouteImport } from './routes/new-arrivals'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ReturnExchangeRouteImport } from './routes/return-exchange'
 import { Route as ShopRouteImport } from './routes/shop'
 import { Route as SignoutRouteImport } from './routes/signout'
 import { Route as AuthenticatedProductSlugRouteImport } from './routes/_authenticated/product.$slug'
@@ -78,6 +79,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReturnExchangeRoute = ReturnExchangeRouteImport.update({
+  id: '/return-exchange',
+  path: '/return-exchange',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShopRoute = ShopRouteImport.update({
   id: '/shop',
   path: '/shop',
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/new-arrivals': typeof NewArrivalsRoute
   '/orders': typeof OrdersRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/return-exchange': typeof ReturnExchangeRoute
   '/shop': typeof ShopRoute
   '/signout': typeof SignoutRoute
   '/product/$slug': typeof AuthenticatedProductSlugRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/new-arrivals': typeof NewArrivalsRoute
   '/orders': typeof OrdersRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/return-exchange': typeof ReturnExchangeRoute
   '/shop': typeof ShopRoute
   '/signout': typeof SignoutRoute
   '/product/$slug': typeof AuthenticatedProductSlugRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/new-arrivals': typeof NewArrivalsRoute
   '/orders': typeof OrdersRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/return-exchange': typeof ReturnExchangeRoute
   '/shop': typeof ShopRoute
   '/signout': typeof SignoutRoute
   '/_authenticated/product/$slug': typeof AuthenticatedProductSlugRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/new-arrivals'
     | '/orders'
     | '/reset-password'
+    | '/return-exchange'
     | '/shop'
     | '/signout'
     | '/product/$slug'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/new-arrivals'
     | '/orders'
     | '/reset-password'
+    | '/return-exchange'
     | '/shop'
     | '/signout'
     | '/product/$slug'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/new-arrivals'
     | '/orders'
     | '/reset-password'
+    | '/return-exchange'
     | '/shop'
     | '/signout'
     | '/_authenticated/product/$slug'
@@ -203,6 +215,7 @@ export interface RootRouteChildren {
   NewArrivalsRoute: typeof NewArrivalsRoute
   OrdersRoute: typeof OrdersRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ReturnExchangeRoute: typeof ReturnExchangeRoute
   ShopRoute: typeof ShopRoute
   SignoutRoute: typeof SignoutRoute
 }
@@ -286,6 +299,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/return-exchange': {
+      id: '/return-exchange'
+      path: '/return-exchange'
+      fullPath: '/return-exchange'
+      preLoaderRoute: typeof ReturnExchangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/shop': {
       id: '/shop'
       path: '/shop'
@@ -333,6 +353,7 @@ const rootRouteChildren: RootRouteChildren = {
   NewArrivalsRoute: NewArrivalsRoute,
   OrdersRoute: OrdersRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ReturnExchangeRoute: ReturnExchangeRoute,
   ShopRoute: ShopRoute,
   SignoutRoute: SignoutRoute,
 }

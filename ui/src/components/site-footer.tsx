@@ -52,6 +52,9 @@ export function SiteFooter() {
             <Link to="/contact" className="block hover:text-primary">
               Contact Us
             </Link>
+            <Link to="/return-exchange" className="block hover:text-primary">
+              Return/Exchange Policy
+            </Link>
             <Link to="/cart" className="block hover:text-primary">
               Your Bag
             </Link>
