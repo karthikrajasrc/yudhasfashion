@@ -30,7 +30,6 @@ const productSchema = z.object({
     z.string().trim().min(1).max(40).optional(),
   ),
   categorySlug: z.string().trim().min(1).max(80),
-  description: z.string().trim().min(1).max(5000),
   price: z.coerce.number().finite().min(0),
   salePrice: z.preprocess(
     (value) => (value === "" || value === undefined ? undefined : value),
@@ -61,7 +60,7 @@ function serializeProduct(product) {
     slug: product.slug,
     sku: product.sku,
     categorySlug: product.categorySlug,
-    description: product.description,
+    description: product.description ?? "",
     images: [product.imageUrl],
     price: product.price,
     salePrice: product.salePrice,
@@ -84,6 +83,19 @@ function serializeAdminProduct(product) {
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function slugifyProductName(name) {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function makeUniqueSlug(slug) {
+  return `${slug}-${randomUUID().slice(0, 8)}`;
 }
 
 export const publicProductsRouter = Router();
@@ -261,12 +273,7 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
       .json({ message: "Sale price must be less than the regular price" });
   }
 
-  const slug = values.name
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+  const slug = slugifyProductName(values.name);
   if (!slug) {
     return res
       .status(400)
@@ -279,15 +286,24 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
   let saved = false;
   try {
     uploadedImage = await uploadProductImage(req.file.buffer);
-    const product = await Product.create({
+    const productData = {
       ...values,
-      slug,
       sku,
       salePrice,
       featured: values.featured === "true",
       imageUrl: uploadedImage.url,
       cloudinaryPublicId: uploadedImage.publicId,
-    });
+    };
+    let product;
+    try {
+      product = await Product.create({ ...productData, slug });
+    } catch (error) {
+      if (error?.code !== 11000 || !error.keyPattern?.slug) throw error;
+      product = await Product.create({
+        ...productData,
+        slug: makeUniqueSlug(slug),
+      });
+    }
     saved = true;
     return res.status(201).json({ product: serializeAdminProduct(product) });
   } catch (error) {
@@ -295,7 +311,11 @@ productsRouter.post("/", upload.single("image"), async (req, res, next) => {
       await removeCloudinaryImage(uploadedImage.publicId);
     }
     if (error?.code === 11000) {
-      const field = error.keyPattern?.sku ? "SKU" : "name";
+      const field = error.keyPattern?.sku
+        ? "SKU"
+        : error.keyPattern?.slug
+          ? "product URL"
+          : "product";
       return res
         .status(409)
         .json({ message: `A product with this ${field} already exists` });
@@ -339,16 +359,18 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
         .json({ message: "Sale price must be less than the regular price" });
     }
 
-    const slug = parsed.data.name
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
+    const slug = slugifyProductName(parsed.data.name);
     if (!slug) {
       return res
         .status(400)
         .json({ message: "Product name must include letters or numbers" });
+    }
+    let productSlug = product.name === parsed.data.name ? product.slug : slug;
+    if (
+      productSlug !== product.slug &&
+      (await Product.exists({ _id: { $ne: product._id }, slug: productSlug }))
+    ) {
+      productSlug = makeUniqueSlug(productSlug);
     }
 
     const previousImageUrl = product.imageUrl;
@@ -356,10 +378,9 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
     if (req.file) uploadedImage = await uploadProductImage(req.file.buffer);
 
     product.name = parsed.data.name;
-    product.slug = slug;
+    product.slug = productSlug;
     product.sku = parsed.data.sku?.toUpperCase() || product.sku;
     product.categorySlug = parsed.data.categorySlug;
-    product.description = parsed.data.description;
     product.price = parsed.data.price;
     product.salePrice = salePrice;
     product.stock = parsed.data.stock;
@@ -371,7 +392,13 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
       product.cloudinaryPublicId = uploadedImage.publicId;
     }
 
-    await product.save();
+    try {
+      await product.save();
+    } catch (error) {
+      if (error?.code !== 11000 || !error.keyPattern?.slug) throw error;
+      product.slug = makeUniqueSlug(slug);
+      await product.save();
+    }
     saved = true;
 
     if (uploadedImage && previousCloudinaryPublicId) {
@@ -386,7 +413,11 @@ productsRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
       await removeCloudinaryImage(uploadedImage.publicId);
     }
     if (error?.code === 11000) {
-      const field = error.keyPattern?.sku ? "SKU" : "name";
+      const field = error.keyPattern?.sku
+        ? "SKU"
+        : error.keyPattern?.slug
+          ? "product URL"
+          : "product";
       return res
         .status(409)
         .json({ message: `A product with this ${field} already exists` });

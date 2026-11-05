@@ -24,7 +24,7 @@ const productSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    description: { type: String, required: true, trim: true, maxlength: 5000 },
+    description: { type: String, default: "", trim: true, maxlength: 5000 },
     imageUrl: { type: String, required: true },
     cloudinaryPublicId: { type: String, default: null },
     sizes: { type: [String], default: [] },

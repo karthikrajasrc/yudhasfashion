@@ -43,9 +43,12 @@ export const Route = createFileRoute("/_authenticated/product/$slug")({
     return {
       meta: [
         { title: `${product.name} — ${formatINR(price)} | YUDHAS FASHION` },
-        { name: "description", content: product.description },
+        { name: "description", content: product.description || product.name },
         { property: "og:title", content: `${product.name} | YUDHAS FASHION` },
-        { property: "og:description", content: product.description },
+        {
+          property: "og:description",
+          content: product.description || product.name,
+        },
       ],
     };
   },
@@ -168,9 +171,11 @@ function ProductDetail() {
               </p>
             </div>
 
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {product.description}
-            </p>
+            {product.description ? (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {product.description}
+              </p>
+            ) : null}
 
             <div className="space-y-4">
               <OptionRow

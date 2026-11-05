@@ -805,15 +805,6 @@ function ProductForm({
           <input name="name" required maxLength={160} className={fieldClass} />
         </Field>
         <input type="hidden" name="categorySlug" value={categorySlug} />
-        <Field label="Description">
-          <textarea
-            name="description"
-            required
-            maxLength={5000}
-            rows={3}
-            className={fieldClass}
-          />
-        </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Price (₹)">
             <input
@@ -969,16 +960,6 @@ function EditProductDialog({
                     </option>
                   ))}
                 </select>
-              </Field>
-              <Field label="Description">
-                <textarea
-                  name="description"
-                  required
-                  maxLength={5000}
-                  rows={3}
-                  defaultValue={product.description}
-                  className={fieldClass}
-                />
               </Field>
               <div className="grid gap-4 sm:grid-cols-3">
                 <Field label="Price (₹)">
