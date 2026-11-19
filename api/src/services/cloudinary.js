@@ -71,6 +71,32 @@ export async function uploadProductImage(buffer) {
   });
 }
 
+export async function uploadCategoryImage(buffer) {
+  configureCloudinary();
+  const webpBuffer = await convertProductImageToWebp(buffer);
+
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: "yudhas-fashion/categories",
+          resource_type: "image",
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          if (!result?.secure_url || !result.public_id) {
+            return reject(new Error("Cloudinary returned an incomplete upload"));
+          }
+          return resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+          });
+        },
+      )
+      .end(webpBuffer);
+  });
+}
+
 export async function convertProductImageToWebp(buffer) {
   try {
     const image = sharp(buffer, { failOn: "error" });

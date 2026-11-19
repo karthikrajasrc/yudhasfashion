@@ -1,17 +1,19 @@
 import { Router } from "express";
 import { z } from "zod";
-import { User } from "../models/user.js";
 import { Order } from "../models/order.js";
 import { Product } from "../models/product.js";
 import { Category } from "../models/category.js";
-import { buildOrderDetails, OrderDetailsError } from "../lib/order-details.js";
 import { requireAdmin, requireAuth } from "../middleware/require-auth.js";
 
 export const ordersRouter = Router();
 export const createOrderSchema = z.object({
   customerName: z.string().trim().min(1).max(100),
-  phone: z.string().trim().min(7).max(30),
+  customerEmail: z.string().trim().email().max(255).optional(),
+  phone: z.string().trim().regex(/^\d{10}$/, "Phone number must contain exactly 10 digits"),
   shippingAddress: z.string().trim().min(5).max(1000),
+  city: z.string().trim().min(1).max(100),
+  state: z.string().trim().min(1).max(100),
+  pincode: z.string().trim().regex(/^\d{6}$/, "PIN code must contain exactly 6 digits"),
   couponCode: z.string().trim().max(40).optional(),
   items: z
     .array(
@@ -78,37 +80,45 @@ async function addProductDetails(orders) {
   });
 }
 
-ordersRouter.post("/", requireAuth, async (req, res, next) => {
-  const parsed = createOrderSchema.safeParse(req.body);
+ordersRouter.post("/track", async (req, res, next) => {
+  const parsed = z
+    .object({
+      orderId: z.string().trim().max(100).optional(),
+      phone: z.string().trim().regex(/^\d{10}$/, "Phone number must contain exactly 10 digits").optional(),
+      email: z.string().trim().email().max(255).optional(),
+    })
+    .refine((value) => value.orderId || value.phone, {
+      message: "Enter an order ID or phone number",
+    })
+    .safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "Invalid order details",
+      message: parsed.error.issues[0]?.message ?? "Invalid tracking details",
     });
   }
-  try {
-    const user = await User.findById(req.authUserId);
-    if (!user)
-      return res.status(401).json({ message: "Authentication required" });
-    const order = await Order.create({
-      ...(await buildOrderDetails(user, parsed.data)),
-      paymentMethod: "cash_on_delivery",
-      paymentStatus: "pending",
-    });
-    return res.status(201).json({ order });
-  } catch (error) {
-    if (error instanceof OrderDetailsError) {
-      return res.status(error.status).json({ message: error.message });
-    }
-    return next(error);
-  }
-});
 
-ordersRouter.get("/mine", requireAuth, async (req, res, next) => {
   try {
-    const orders = await Order.find({ user: req.authUserId })
-      .sort({ createdAt: -1 })
-      .populate("user", "name email");
-    return res.json({ orders: await addProductDetails(orders) });
+    const query = parsed.data.orderId
+      ? { orderNumber: parsed.data.orderId }
+      : { phone: parsed.data.phone };
+    const order = await Order.findOne(query).sort({ createdAt: -1 });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (
+      parsed.data.email &&
+      order.customerEmail?.toLowerCase() !== parsed.data.email.toLowerCase()
+    ) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    if (parsed.data.phone && parsed.data.orderId) {
+      if (
+        order.orderNumber !== parsed.data.orderId ||
+        order.phone !== parsed.data.phone
+      ) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+    }
+    const [trackedOrder] = await addProductDetails([order]);
+    return res.json({ order: trackedOrder });
   } catch (error) {
     return next(error);
   }

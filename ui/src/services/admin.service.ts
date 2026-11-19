@@ -10,6 +10,7 @@ export type AdminCategory = {
   slug: string;
   displayOrder: number;
   status: "active" | "inactive";
+  imageUrl?: string;
 };
 
 export type AdminProduct = {
@@ -36,6 +37,10 @@ export type AdminOrder = {
   customerEmail: string;
   phone: string;
   shippingAddress: string;
+  city: string;
+  state: string;
+  pincode: string;
+  pincode: string;
   district?: string;
   items: {
     productId: string;
@@ -52,7 +57,7 @@ export type AdminOrder = {
   subtotal: number;
   deliveryCharge: number;
   total: number;
-  paymentMethod?: "cash_on_delivery" | "razorpay";
+  paymentMethod?: "razorpay";
   paymentStatus?: "pending" | "created" | "authorized" | "captured" | "failed";
   status: OrderStatus;
   createdAt: string;
@@ -68,8 +73,11 @@ export type OrderStatus =
 
 export type NewOrder = {
   customerName: string;
+  customerEmail?: string;
   phone: string;
   shippingAddress: string;
+  city: string;
+  state: string;
   couponCode?: string;
   items: {
     productId: string;
@@ -116,13 +124,33 @@ export async function updateAdminProduct(id: string, data: FormData) {
   return result.product;
 }
 
-export async function createAdminCategory(data: { name: string }) {
+export async function createAdminCategory(data: { name: string; image?: File }) {
+  const form = new FormData();
+  form.set("name", data.name);
+  if (data.image) form.set("image", data.image);
   const result = await readApiResponse<{ category: AdminCategory }>(
     fetch(`${apiUrl}/api/admin/categories`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: form,
+    }),
+    "The admin request could not be completed",
+  );
+  return result.category;
+}
+
+export async function updateAdminCategory(
+  id: string,
+  data: { name: string; image?: File },
+) {
+  const form = new FormData();
+  form.set("name", data.name);
+  if (data.image) form.set("image", data.image);
+  const result = await readApiResponse<{ category: AdminCategory }>(
+    fetch(`${apiUrl}/api/admin/categories/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      credentials: "include",
+      body: form,
     }),
     "The admin request could not be completed",
   );
@@ -206,14 +234,3 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
   return result.order;
 }
 
-export async function createOrder(data: NewOrder) {
-  return readApiResponse<{ order: AdminOrder }>(
-    fetch(`${apiUrl}/api/orders`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }),
-    "The admin request could not be completed",
-  );
-}

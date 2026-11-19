@@ -1,24 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  Sparkles,
-  Truck,
-  ShieldCheck,
-  Gem,
-  Lock,
-} from "lucide-react";
-import { toast } from "sonner";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import logo from "@/assets/logo.png";
-import { Section, GoldButton, OutlineLinkStyle } from "@/components/section";
+import { Section } from "@/components/section";
 import { ProductCard } from "@/components/product-card";
 import {
   getCategoryProducts,
   getCategoryTree,
-  getHomeCollections,
 } from "@/services/shop.service";
-import type { Category, Product } from "@/data/catalog";
+import { homeBanners } from "@/data/home-config";
+import type { Category } from "@/data/catalog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,58 +36,60 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const {
-    data: collections,
-    error: collectionsError,
-    isError: collectionsFailed,
-  } = useQuery({
-    queryKey: ["home-collections"],
-    queryFn: getHomeCollections,
-  });
   const { data: tree } = useQuery({
     queryKey: ["category-tree"],
     queryFn: getCategoryTree,
   });
-  const homeCategories = (tree ?? [])
-    .flatMap((category) => [category, ...category.children])
-    .slice(0, 4);
+  const homeCategories = (tree ?? []).flatMap((category) => [
+    category,
+    ...category.children,
+  ]);
   const categorySlugs = homeCategories.map((category) => category.slug);
   const { data: categoryProducts } = useQuery({
     queryKey: ["home-category-products", categorySlugs],
     queryFn: () => getCategoryProducts(categorySlugs),
     enabled: categorySlugs.length > 0,
   });
+  const mergedProducts = homeCategories.flatMap(
+    (category) => categoryProducts?.[category.slug] ?? [],
+  );
+  const uniqueProducts = Array.from(
+    new Map(mergedProducts.map((product) => [product.id, product])).values(),
+  );
 
   return (
     <>
       <Hero />
-      <Marquee />
+      <CategoryIcons categories={homeCategories} />
 
       <Section
-        eyebrow="Curated Edits"
-        title="Shop by Category"
-        description="From everyday elegance to festive sparkle."
+        eyebrow="Recently Added"
+        title="Our Products"
+        description="Explore the latest additions from every collection."
       >
-        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
-          {homeCategories.map((category) => (
-            <CategoryCard
-              key={category.id}
-              category={category}
-              products={categoryProducts?.[category.slug] ?? []}
-            />
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-6 lg:grid-cols-5">
+          {categoryProducts
+            ? uniqueProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))
+            : Array.from({ length: 10 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="aspect-4/5 animate-pulse border border-border bg-card"
+                />
+              ))}
         </div>
+        {categoryProducts && uniqueProducts.length > 0 ? (
+          <div className="mt-10 flex justify-center">
+            <Link
+              to="/shop"
+              className="inline-flex items-center justify-center gap-2 border border-primary/60 px-7 py-3 text-[0.7rem] tracking-[0.24em] text-primary uppercase transition-colors hover:bg-primary hover:text-primary-foreground"
+            >
+              View More <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        ) : null}
       </Section>
-
-      {/* <Grid title="New Arrivals" eyebrow="Fresh from the atelier" items={collections?.newArrivals} /> */}
-      <Promo />
-      <Grid
-        title="Trending Now"
-        eyebrow="Loved this season"
-        items={collections?.trending}
-        error={collectionsFailed ? collectionsError?.message : undefined}
-      />
-      {/* <Grid title="Festive Offers" eyebrow="Up to 40% off" items={collections?.onSale} /> */}
 
       <Section
         className="border-y border-border bg-card/30"
@@ -168,179 +162,152 @@ function Home() {
   );
 }
 
-function CategoryCard({
-  category,
-  products,
-}: {
-  category: Category;
-  products: Product[];
-}) {
-  const [activeProduct, setActiveProduct] = useState(0);
-  const product = products[activeProduct % Math.max(products.length, 1)];
-
-  useEffect(() => {
-    setActiveProduct(0);
-    if (products.length < 2) return;
-    const interval = window.setInterval(() => {
-      setActiveProduct((current) => (current + 1) % products.length);
-    }, 4000);
-    return () => window.clearInterval(interval);
-  }, [category.slug, products.length]);
-
+function CategoryIcons({ categories }: { categories: Category[] }) {
   return (
-    <Link
-      to="/shop"
-      search={{ category: category.slug }}
-      className="group relative isolate flex aspect-3/4 items-end overflow-hidden border border-border p-5 text-center"
-    >
-      {product?.images[0] ? (
-        <img
-          key={product.id}
-          src={product.images[0]}
-          alt={product.name}
-          loading="lazy"
-          className="absolute inset-0 -z-20 size-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
-      ) : (
-        <div className="absolute inset-0 -z-20 bg-gradient-to-br from-card via-background to-secondary" />
-      )}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-background/95 via-background/30 to-background/5" />
-      <div className="w-full">
-        <h3 className="text-xl">{category.name}</h3>
-        <p className="mt-1 text-[0.65rem] tracking-[0.2em] text-primary uppercase">
-          Explore
-        </p>
+    <section className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
+      <div className="flex gap-5 overflow-x-auto pb-2 sm:justify-center sm:gap-8">
+        {categories.map((category) => (
+          <Link
+            key={category.id}
+            to="/shop"
+            search={{ category: category.slug }}
+            className="group flex w-[82px] shrink-0 flex-col items-center text-center"
+          >
+            <span className="grid size-[72px] place-items-center overflow-hidden rounded-full border border-primary/25 bg-card shadow-sm transition-transform group-hover:-translate-y-1 group-hover:border-primary">
+              {category.imageUrl ? (
+                <img
+                  src={category.imageUrl}
+                  alt={category.name}
+                  className="size-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="text-2xl text-primary">
+                  {category.name.charAt(0).toUpperCase()}
+                </span>
+              )}
+            </span>
+            <span className="mt-2 line-clamp-2 text-xs leading-tight text-foreground">
+              {category.name}
+            </span>
+          </Link>
+        ))}
       </div>
-    </Link>
+    </section>
   );
 }
 
 function Hero() {
-  return (
-    <section className="relative isolate overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/20" />
-      <div className="relative mx-auto flex min-h-[82vh] max-w-7xl items-center px-4 py-20 lg:px-8">
-        <div className="animate-rise max-w-xl space-y-7">
-          <p className="eyebrow">Festive Collection 2026</p>
-          <h1 className="text-5xl leading-[1.05] sm:text-6xl lg:text-7xl">
-            Adorn Every Moment with{" "}
-            <span className="text-gold-gradient">Yudhas Fashion</span>
-            <br />
-          </h1>
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Earrings, bangles, chains, bracelets and hair clips, designed to
-            turn everyday looks into statement ones. Made for the women who make
-            every occasion their own.
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <Link to="/shop" className="inline-flex">
-              <GoldButton>
-                Shop Now <ArrowRight className="size-4" />
-              </GoldButton>
-            </Link>
-            {/* <Link to="/new-arrivals" className={OutlineLinkStyle()}>
-              New Arrivals
-            </Link> */}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [activeBanner, setActiveBanner] = useState(0);
 
-function Marquee() {
-  const items = [
-    { icon: Truck, label: "Free delivery above ₹1,000" },
-    { icon: Lock, label: "SECURE PAYMENTS" },
-    { icon: ShieldCheck, label: "	PAN-INDIA SHIPPING" },
-    { icon: Sparkles, label: "GIFT-READY PACKAGING" },
-  ];
+  const scrollBanner = (index: number) => {
+    const carousel = carouselRef.current;
+    const slide = carousel?.children[index] as HTMLElement | undefined;
+    if (!carousel || !slide) return;
+    const carouselRect = carousel.getBoundingClientRect();
+    const slideRect = slide.getBoundingClientRect();
+    carousel.scrollTo({
+      left: carousel.scrollLeft + slideRect.left - carouselRect.left,
+      behavior: "smooth",
+    });
+  };
+
+  useEffect(() => {
+    if (homeBanners.length < 2) return;
+
+    const interval = window.setInterval(() => {
+      const carousel = carouselRef.current;
+      if (!carousel) return;
+      const slides = Array.from(carousel.children) as HTMLElement[];
+      if (slides.length === 0) return;
+
+      setActiveBanner((current) => {
+        const next = (current + 1) % slides.length;
+        const carouselRect = carousel.getBoundingClientRect();
+        const slideRect = slides[next].getBoundingClientRect();
+        carousel.scrollTo({
+          left: carousel.scrollLeft + slideRect.left - carouselRect.left,
+          behavior: "smooth",
+        });
+        return next;
+      });
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (homeBanners.length === 0) return null;
   return (
-    <div className="border-y border-border bg-card/40">
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-6 sm:grid-cols-2 lg:grid-cols-4 lg:px-8">
-        {items.map(({ icon: Icon, label }) => (
-          <div key={label} className="flex items-center justify-center gap-3">
-            <Icon className="size-4 text-primary" />
-            <span className="text-[0.66rem] tracking-[0.18em] text-muted-foreground uppercase">
-              {label}
-            </span>
-          </div>
+    <section className="mx-auto w-full max-w-[1400px] px-4 pt-6 lg:px-0">
+      <div
+        ref={carouselRef}
+        dir="ltr"
+        className="flex touch-pan-x snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        aria-label="Featured promotions"
+        onScroll={(event) => {
+          const carousel = event.currentTarget;
+          const slides = Array.from(carousel.children) as HTMLElement[];
+          if (slides.length === 0) return;
+          const carouselRect = carousel.getBoundingClientRect();
+          const nearest = slides.reduce(
+            (closest, slide, index) =>
+              Math.abs(
+                slide.getBoundingClientRect().left - carouselRect.left,
+              ) <
+              Math.abs(
+                slides[closest].getBoundingClientRect().left -
+                  carouselRect.left,
+              )
+                ? index
+                : closest,
+            0,
+          );
+          setActiveBanner(nearest);
+        }}
+      >
+        {homeBanners.map((banner) => (
+          <Link
+            key={banner.title}
+            to={banner.link as "/shop"}
+            className="group relative block h-[188px] w-[335px] shrink-0 snap-center overflow-hidden rounded-[15px] border border-border sm:h-[370px] sm:w-[1400px]"
+            aria-label={banner.title}
+          >
+            <picture>
+              <source
+                media="(max-width: 640px)"
+                srcSet={banner.mobileImage}
+              />
+              <img
+                src={banner.desktopImage}
+                alt={banner.title}
+                loading="eager"
+                className="size-full object-cover transition-transform duration-700 group-hover:scale-[1.015]"
+              />
+            </picture>
+          </Link>
         ))}
       </div>
-    </div>
-  );
-}
-
-function Grid({
-  title,
-  eyebrow,
-  items,
-  error,
-}: {
-  title: string;
-  eyebrow: string;
-  items: Product[] | undefined;
-  error?: string | undefined;
-}) {
-  return (
-    <Section
-      eyebrow={eyebrow}
-      title={title}
-      action={
-        <Link to="/shop" className={OutlineLinkStyle()}>
-          View all <ArrowRight className="size-4" />
-        </Link>
-      }
-    >
-      {error ? (
-        <p role="alert" className="text-center text-sm text-destructive">
-          {error}
-        </p>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
-            {items
-              ? items.map((p) => <ProductCard key={p.id} product={p} />)
-              : Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-4/5 animate-pulse border border-border bg-card"
-                  />
-                ))}
-          </div>
-          {items?.length === 0 ? (
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              Our collection is being updated. Please check back soon.
-            </p>
-          ) : null}
-        </>
-      )}
-    </Section>
-  );
-}
-
-function Promo() {
-  return (
-    <section className="bg-wine-gradient">
-      <div className="mx-auto max-w-7xl px-4 py-16 text-center lg:px-8">
-        <p className="text-[0.66rem] tracking-[0.3em] text-ivory/80 uppercase">
-          Limited Time
-        </p>
-        <h2 className="mt-4 text-4xl text-ivory sm:text-5xl">
-          Festive Gold Sale — Up to 40% Off
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-sm text-ivory/80">
-          Use code <span className="text-champagne">YUDHAS10</span> for an extra
-          10% off orders above ₹2,000.
-        </p>
-        <Link
-          to="/shop"
-          search={{ discounted: true }}
-          className="mt-8 inline-flex"
-        >
-          <GoldButton>Shop the sale</GoldButton>
-        </Link>
-      </div>
+      {homeBanners.length > 1 ? (
+        <div className="mt-4 flex justify-center gap-2">
+          {homeBanners.map((banner, index) => (
+            <button
+              key={banner.title}
+              type="button"
+              aria-label={`Go to ${banner.title} banner`}
+              onClick={() => {
+                scrollBanner(index);
+                setActiveBanner(index);
+              }}
+              className={activeBanner === index
+                ? "size-2.5 rounded-full bg-primary"
+                : "size-2.5 rounded-full border border-primary/60 bg-transparent"}
+            />
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
+
+

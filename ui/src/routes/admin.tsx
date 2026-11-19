@@ -20,12 +20,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/context/auth-context";
 import { formatINR } from "@/lib/format";
 import {
   createAdminProduct,
   createAdminCategory,
   deleteAdminCategory,
+  updateAdminCategory,
   deleteAdminProduct,
   updateAdminProduct,
   listAdminOrders,
@@ -143,6 +154,19 @@ function AdminPage() {
         queryClient.invalidateQueries({ queryKey: ["category-tree"] }),
       ]);
       toast.success("Category added");
+    },
+    onError: (error) => setMutationError(error.message),
+  });
+  const updateCategory = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name: string; image?: File } }) =>
+      updateAdminCategory(id, data),
+    onMutate: () => setMutationError(null),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["categories"] }),
+        queryClient.invalidateQueries({ queryKey: ["category-tree"] }),
+      ]);
+      toast.success("Category updated");
     },
     onError: (error) => setMutationError(error.message),
   });
@@ -362,9 +386,7 @@ function AdminPage() {
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             Payment:{" "}
-                            {order.paymentMethod === "razorpay"
-                              ? `Razorpay · ${order.paymentStatus ?? "pending"}`
-                              : "Cash on delivery"}
+                            {`Razorpay · ${order.paymentStatus ?? "pending"}`}
                           </p>
                         </div>
                         <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -390,7 +412,9 @@ function AdminPage() {
                       </div>
                       <p className="mt-4 whitespace-pre-wrap text-sm text-muted-foreground">
                         {order.shippingAddress}
-                        {order.district ? `, ${order.district}` : ""}
+                        {order.city ? `, ${order.city}` : ""}
+                        {order.state ? `, ${order.state}` : ""}
+                        {order.pincode ? ` - ${order.pincode}` : ""}
                       </p>
                       <div className="mt-4 divide-y divide-border border-y border-border">
                         {order.items.map((item, index) => (
@@ -432,8 +456,12 @@ function AdminPage() {
             categoriesError={categoriesQuery.error?.message}
             categoryBusy={createCategory.isPending}
             categoryDeleteBusy={deleteCategory.isPending}
+            categoryUpdateBusy={updateCategory.isPending}
             onCreateCategory={(category) =>
               createCategory.mutateAsync(category)
+            }
+            onUpdateCategory={(id, category) =>
+              updateCategory.mutateAsync({ id, data: category })
             }
             onDeleteCategory={(id) => deleteCategory.mutateAsync(id)}
             onSubmit={async (data) => {
@@ -636,7 +664,9 @@ function ProductForm({
   categoriesError,
   categoryBusy,
   categoryDeleteBusy,
+  categoryUpdateBusy,
   onCreateCategory,
+  onUpdateCategory,
   onDeleteCategory,
   onSubmit,
 }: {
@@ -646,13 +676,18 @@ function ProductForm({
   categoriesError?: string | undefined;
   categoryBusy: boolean;
   categoryDeleteBusy: boolean;
-  onCreateCategory: (category: { name: string }) => Promise<AdminCategory>;
+  categoryUpdateBusy: boolean;
+  onCreateCategory: (category: { name: string; image?: File }) => Promise<AdminCategory>;
+  onUpdateCategory: (id: string, category: { name: string; image?: File }) => Promise<AdminCategory>;
   onDeleteCategory: (id: string) => Promise<unknown>;
   onSubmit: (data: FormData) => Promise<boolean>;
 }) {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [categorySlug, setCategorySlug] = useState("");
   const [categoryName, setCategoryName] = useState("");
+  const [categoryImage, setCategoryImage] = useState<File | undefined>();
+  const [editingCategory, setEditingCategory] = useState<AdminCategory | null>(null);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (
@@ -668,9 +703,13 @@ function ProductForm({
   const addCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const category = await onCreateCategory({ name: categoryName });
+      const category = await onCreateCategory({
+        name: categoryName,
+        ...(categoryImage ? { image: categoryImage } : {}),
+      });
       setCategorySlug(category.slug);
       setCategoryName("");
+      setCategoryImage(undefined);
       setCategoryDialogOpen(false);
     } catch {
       // The mutation reports its error to the user.
@@ -736,25 +775,45 @@ function ProductForm({
                   key={category.id}
                   className="flex items-center justify-between gap-3 text-sm"
                 >
-                  <span>{category.name}</span>
-                  <button
-                    type="button"
-                    aria-label={`Delete ${category.name} category`}
-                    title={`Delete ${category.name}`}
-                    disabled={categoryDeleteBusy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete the "${category.name}" category? Categories used by products cannot be deleted.`,
-                        )
-                      ) {
-                        void onDeleteCategory(category.id).catch(() => {});
-                      }
-                    }}
-                    className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-50"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <span className="flex items-center gap-2">
+                    {category.imageUrl ? (
+                      <img
+                        src={category.imageUrl}
+                        alt=""
+                        className="size-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="grid size-8 place-items-center rounded-full border border-primary/30 text-primary">
+                        {category.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    {category.name}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Edit ${category.name} category`}
+                      title={`Edit ${category.name}`}
+                      onClick={() => {
+                        setEditingCategory(category);
+                        setCategoryName(category.name);
+                        setCategoryImage(undefined);
+                      }}
+                      className="p-1 text-muted-foreground hover:text-primary"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${category.name} category`}
+                      title={`Delete ${category.name}`}
+                      disabled={categoryDeleteBusy}
+                      onClick={() => setDeleteCategoryId(category.id)}
+                      className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -791,6 +850,16 @@ function ProductForm({
                 className={fieldClass}
               />
             </Field>
+            <Field label="Category icon">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) =>
+                  setCategoryImage(event.target.files?.[0] ?? undefined)
+                }
+                className={fieldClass}
+              />
+            </Field>
             <GoldButton type="submit" disabled={categoryBusy}>
               {categoryBusy ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -800,6 +869,95 @@ function ProductForm({
           </form>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={Boolean(editingCategory)}
+        onOpenChange={(open) => {
+          if (!open) setEditingCategory(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit category</DialogTitle>
+            <DialogDescription>
+              Update the category name or upload a replacement icon.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!editingCategory) return;
+              void onUpdateCategory(editingCategory.id, {
+                name: categoryName,
+                ...(categoryImage ? { image: categoryImage } : {}),
+              })
+                .then(() => {
+                  setEditingCategory(null);
+                  setCategoryName("");
+                  setCategoryImage(undefined);
+                })
+                .catch(() => {});
+            }}
+            className="space-y-4"
+          >
+            <Field label="Category name">
+              <input
+                value={categoryName}
+                onChange={(event) => setCategoryName(event.target.value)}
+                required
+                maxLength={80}
+                className={fieldClass}
+              />
+            </Field>
+            <Field label="Category icon">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) =>
+                  setCategoryImage(event.target.files?.[0] ?? undefined)
+                }
+                className={fieldClass}
+              />
+            </Field>
+            <GoldButton
+              type="submit"
+              disabled={categoryUpdateBusy || !editingCategory}
+            >
+              {categoryUpdateBusy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              Save changes
+            </GoldButton>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={Boolean(deleteCategoryId)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCategoryId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Categories used by products cannot be deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!deleteCategoryId) return;
+                void onDeleteCategory(deleteCategoryId)
+                  .then(() => setDeleteCategoryId(null))
+                  .catch(() => {});
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Product name">
           <input name="name" required maxLength={160} className={fieldClass} />

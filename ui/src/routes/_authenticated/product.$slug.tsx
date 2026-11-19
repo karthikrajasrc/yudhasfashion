@@ -57,7 +57,7 @@ export const Route = createFileRoute("/_authenticated/product/$slug")({
 
 function ProductDetail() {
   const { product } = Route.useLoaderData();
-  const { addToCart } = useShop();
+  const { cart, addToCart, setQuantity } = useShop();
   const [image, setImage] = useState(0);
   const [size, setSize] = useState(product.sizes[0] ?? "");
   const [color, setColor] = useState(product.colors[0] ?? "");
@@ -66,6 +66,13 @@ function ProductDetail() {
   const off = discountPercent(product.price, product.salePrice);
   const price = effectivePrice(product.price, product.salePrice);
   const saved = product.price - price;
+  const cartLine = cart.find(
+    (line) =>
+      line.productId === product.id &&
+      line.size === size &&
+      line.color === color,
+  );
+  const cartQuantity = cartLine?.quantity ?? 0;
 
   const deliverySettingsQuery = useQuery({
     queryKey: ["delivery-settings"],
@@ -214,26 +221,65 @@ function ProductDetail() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <GoldButton
-                disabled={product.stock <= 0}
-                onClick={() =>
-                  addToCart(
-                    {
-                      productId: product.id,
-                      name: product.name,
-                      slug: product.slug,
-                      image: product.images[0] ?? "",
-                      price: product.price,
-                      salePrice: product.salePrice,
-                      size,
-                      color,
-                    },
-                    qty,
-                  )
-                }
-              >
-                Add to bag
-              </GoldButton>
+              {cartQuantity > 0 ? (
+                <div className="grid grid-cols-[48px_1fr_48px] items-center border border-primary/60">
+                  <button
+                    type="button"
+                    aria-label="Decrease cart quantity"
+                    onClick={() =>
+                      setQuantity(
+                        product.id,
+                        cartQuantity - 1,
+                        size,
+                        color,
+                      )
+                    }
+                    className="grid h-11 place-items-center text-primary"
+                  >
+                    <Minus className="size-4" />
+                  </button>
+                  <span className="h-11 min-w-28 border-x border-primary/60 px-4 text-center text-[0.7rem] leading-[44px] tracking-[0.18em] text-primary uppercase">
+                    {cartQuantity} Added
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Increase cart quantity"
+                    disabled={cartQuantity >= product.stock}
+                    onClick={() =>
+                      setQuantity(
+                        product.id,
+                        cartQuantity + 1,
+                        size,
+                        color,
+                      )
+                    }
+                    className="grid h-11 place-items-center text-primary disabled:opacity-40"
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                </div>
+              ) : (
+                <GoldButton
+                  disabled={product.stock <= 0}
+                  onClick={() =>
+                    addToCart(
+                      {
+                        productId: product.id,
+                        name: product.name,
+                        slug: product.slug,
+                        image: product.images[0] ?? "",
+                        price: product.price,
+                        salePrice: product.salePrice,
+                        size,
+                        color,
+                      },
+                      qty,
+                    )
+                  }
+                >
+                  Add to bag
+                </GoldButton>
+              )}
               <Link to="/cart" className="inline-flex">
                 <button
                   disabled={product.stock <= 0}

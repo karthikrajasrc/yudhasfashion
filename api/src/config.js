@@ -22,6 +22,12 @@ export const config = {
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
+  smtpHost: process.env.SMTP_HOST ?? "smtp.gmail.com",
+  smtpPort: Number(process.env.SMTP_PORT ?? 587),
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER,
+  smtpPass: process.env.SMTP_PASS,
+  emailFrom: process.env.EMAIL_FROM ?? "Yudhas Fashion <yudhasfashion@gmail.com>",
   clientOrigins: (process.env.CLIENT_ORIGINS ?? "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())

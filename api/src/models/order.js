@@ -22,15 +22,15 @@ const orderSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
       index: true,
     },
     customerName: { type: String, required: true, trim: true, maxlength: 100 },
     customerEmail: {
       type: String,
-      required: true,
       trim: true,
       lowercase: true,
+      default: "",
     },
     phone: { type: String, required: true, trim: true, maxlength: 30 },
     shippingAddress: {
@@ -40,6 +40,9 @@ const orderSchema = new mongoose.Schema(
       maxlength: 1000,
     },
     district: { type: String, trim: true, maxlength: 100 },
+    city: { type: String, trim: true, maxlength: 100 },
+    state: { type: String, trim: true, maxlength: 100 },
+    pincode: { type: String, trim: true, match: /^\d{6}$/ },
     items: { type: [orderItemSchema], required: true },
     subtotal: { type: Number, required: true, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
@@ -48,8 +51,8 @@ const orderSchema = new mongoose.Schema(
     total: { type: Number, required: true, min: 0 },
     paymentMethod: {
       type: String,
-      enum: ["cash_on_delivery", "razorpay"],
-      default: "cash_on_delivery",
+      enum: ["razorpay"],
+      default: "razorpay",
       required: true,
     },
     paymentStatus: {
@@ -64,6 +67,7 @@ const orderSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    emailSentAt: { type: Date, default: null },
     status: {
       type: String,
       enum: [

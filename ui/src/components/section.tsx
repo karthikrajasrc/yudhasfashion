@@ -17,16 +17,11 @@ export function Section({
   action?: ReactNode;
 }) {
   return (
-    <section className={cn("mx-auto max-w-7xl px-4 py-16 lg:px-8 lg:py-24", className)}>
+    <section className={cn("mx-auto max-w-7xl px-4 py-2 lg:px-8 lg:py-24", className)}>
       {(eyebrow || title) && (
         <div className="mb-10 text-center">
           {eyebrow && <p className="eyebrow">{eyebrow}</p>}
           {title && <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl">{title}</h2>}
-          {description && (
-            <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {description}
-            </p>
-          )}
           <div className="hairline mx-auto mt-6 w-24" />
         </div>
       )}

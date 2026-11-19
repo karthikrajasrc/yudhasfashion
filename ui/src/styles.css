@@ -167,3 +167,24 @@
 @utility animate-rise {
   animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+@utility field-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+@utility checkout-input {
+  width: 100%;
+  border: 1px solid var(--input);
+  background: transparent;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  outline: none;
+}
+
+.checkout-input:focus {
+  border-color: var(--primary);
+}

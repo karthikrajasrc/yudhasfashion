@@ -110,25 +110,12 @@ export const getRelatedProducts = async (slug: string): Promise<Product[]> => {
   return result.products.map(withImageOrigin);
 };
 
-export const getHomeCollections = async () => {
-  const [newArrivals, trending, onSale] = await Promise.all([
-    listProducts({ newArrivalsOnly: true, perPage: 4 }),
-    listProducts({ featuredOnly: true, perPage: 4 }),
-    listProducts({ discountedOnly: true, perPage: 4 }),
-  ]);
-  return {
-    newArrivals: newArrivals.items,
-    trending: trending.items,
-    onSale: onSale.items,
-  };
-};
-
 export const getCategoryProducts = async (categorySlugs: string[]) => {
   const entries = await Promise.all(
     categorySlugs.map(async (slug) => {
       const result = await listProducts({
         category: slug,
-        perPage: 8,
+        perPage: 10,
         sort: "newest",
       });
       return [slug, result.items] as const;

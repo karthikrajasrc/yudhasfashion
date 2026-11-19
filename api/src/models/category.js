@@ -11,6 +11,8 @@ const categorySchema = new mongoose.Schema(
       lowercase: true,
     },
     displayOrder: { type: Number, default: 0, min: 0 },
+    imageUrl: { type: String, default: "" },
+    cloudinaryPublicId: { type: String, default: "" },
     status: {
       type: String,
       enum: ["active", "inactive"],

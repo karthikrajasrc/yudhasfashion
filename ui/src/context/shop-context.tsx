@@ -115,7 +115,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         prev
           .map((l) =>
             sameLine(l, productId, size, color)
-              ? { ...l, quantity: Math.max(1, quantity) }
+              ? { ...l, quantity: Math.max(0, quantity) }
               : l,
           )
           .filter((l) => l.quantity > 0),

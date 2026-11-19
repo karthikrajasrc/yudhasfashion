@@ -91,11 +91,14 @@ export async function buildOrderDetails(user, input) {
 
   return {
     orderNumber: `YF-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`,
-    user: user._id,
+    ...(user ? { user: user._id } : {}),
     customerName: input.customerName,
-    customerEmail: user.email,
+    customerEmail: input.customerEmail?.toLowerCase() ?? user?.email ?? "",
     phone: input.phone,
     shippingAddress: input.shippingAddress,
+    city: input.city,
+    state: input.state,
+    pincode: input.pincode,
     items,
     subtotal,
     discount,

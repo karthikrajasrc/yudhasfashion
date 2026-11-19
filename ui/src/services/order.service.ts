@@ -5,12 +5,18 @@ const apiUrl = (
   import.meta.env.BACKEND_API_URL || "http://localhost:4000"
 ).replace(/\/$/, "");
 
-export async function listMyOrders(): Promise<AdminOrder[]> {
-  const result = await readApiResponse<{ orders: AdminOrder[] }>(
-    fetch(`${apiUrl}/api/orders/mine`, {
-      credentials: "include",
+export async function trackOrder(orderId?: string, phone?: string, email?: string) {
+  const result = await readApiResponse<{ order: AdminOrder }>(
+    fetch(`${apiUrl}/api/orders/track`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(orderId ? { orderId } : {}),
+        ...(phone ? { phone } : {}),
+        ...(email ? { email } : {}),
+      }),
     }),
-    "Unable to load your orders",
+    "Unable to track your order",
   );
-  return result.orders;
+  return result.order;
 }

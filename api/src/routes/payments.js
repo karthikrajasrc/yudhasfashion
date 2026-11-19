@@ -3,8 +3,6 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { config } from "../config.js";
 import { Order } from "../models/order.js";
-import { User } from "../models/user.js";
-import { requireAuth } from "../middleware/require-auth.js";
 import { buildOrderDetails, OrderDetailsError } from "../lib/order-details.js";
 import { createOrderSchema } from "./orders.js";
 import {
@@ -13,6 +11,7 @@ import {
   verifyCheckoutSignature,
   verifyWebhookSignature,
 } from "../services/razorpay.js";
+import { sendConfirmedOrderEmail } from "../services/email.js";
 
 export const paymentsRouter = Router();
 export const paymentWebhookRouter = Router();
@@ -29,10 +28,10 @@ const checkoutVerificationSchema = z.object({
   razorpay_payment_id: z.string().min(1).max(100),
   razorpay_signature: z.string().regex(/^[a-f\d]{64}$/i),
 });
+const pendingCheckoutDetails = new Map();
 
 paymentsRouter.post(
   "/orders",
-  requireAuth,
   checkoutLimiter,
   async (req, res, next) => {
     const parsed = createOrderSchema.safeParse(req.body);
@@ -43,11 +42,7 @@ paymentsRouter.post(
     }
 
     try {
-      const user = await User.findById(req.authUserId);
-      if (!user)
-        return res.status(401).json({ message: "Authentication required" });
-
-      const details = await buildOrderDetails(user, parsed.data);
+      const details = await buildOrderDetails(null, parsed.data);
       const amount = Math.round(details.total * 100);
       if (amount < 100) {
         return res
@@ -69,12 +64,7 @@ paymentsRouter.post(
         throw new RazorpayError("Payment provider returned an invalid order");
       }
 
-      const order = await Order.create({
-        ...details,
-        paymentMethod: "razorpay",
-        paymentStatus: "created",
-        razorpayOrderId: razorpayOrder.id,
-      });
+      pendingCheckoutDetails.set(razorpayOrder.id, details);
       return res.status(201).json({
         keyId: config.razorpayKeyId,
         order: {
@@ -83,7 +73,7 @@ paymentsRouter.post(
           currency: "INR",
           receipt: details.orderNumber,
         },
-        orderNumber: order.orderNumber,
+        orderNumber: details.orderNumber,
       });
     } catch (error) {
       if (
@@ -99,7 +89,6 @@ paymentsRouter.post(
 
 paymentsRouter.post(
   "/verify",
-  requireAuth,
   checkoutLimiter,
   async (req, res, next) => {
     const parsed = checkoutVerificationSchema.safeParse(req.body);
@@ -123,27 +112,33 @@ paymentsRouter.post(
           .json({ message: "Payment signature is invalid" });
       }
 
-      const order = await Order.findOne({
+      const existingOrder = await Order.findOne({
         razorpayOrderId,
-        user: req.authUserId,
         paymentMethod: "razorpay",
       });
-      if (!order)
-        return res.status(404).json({ message: "Payment order not found" });
       if (
-        order.paymentStatus === "captured" &&
-        order.razorpayPaymentId === razorpayPaymentId
+        existingOrder?.paymentStatus === "captured" &&
+        existingOrder.razorpayPaymentId === razorpayPaymentId
       ) {
+        try {
+          await sendConfirmedOrderEmail(existingOrder);
+        } catch (error) {
+          console.error("Confirmed order email failed", error);
+        }
         return res.json({
-          orderNumber: order.orderNumber,
-          paymentStatus: order.paymentStatus,
+          orderNumber: existingOrder.orderNumber,
+          paymentStatus: existingOrder.paymentStatus,
         });
       }
+
+      const details = pendingCheckoutDetails.get(razorpayOrderId);
+      if (!details)
+        return res.status(404).json({ message: "Payment order not found" });
 
       let payment = await razorpayRequest(
         `/payments/${encodeURIComponent(razorpayPaymentId)}`,
       );
-      const expectedAmount = Math.round(order.total * 100);
+      const expectedAmount = Math.round(details.total * 100);
       if (
         payment.order_id !== razorpayOrderId ||
         payment.amount !== expectedAmount ||
@@ -172,22 +167,15 @@ paymentsRouter.post(
       }
       if (payment.status !== "captured") {
         if (payment.status === "failed") {
-          await Order.updateOne(
-            { _id: order._id, paymentStatus: { $ne: "captured" } },
-            { $set: { paymentStatus: "failed", razorpayPaymentId } },
-          );
+          pendingCheckoutDetails.delete(razorpayOrderId);
           return res
             .status(402)
             .json({ message: "Payment was not successful" });
         }
-        await Order.updateOne(
-          { _id: order._id, paymentStatus: { $ne: "captured" } },
-          { $set: { paymentStatus: "authorized", razorpayPaymentId } },
-        );
         return res.status(202).json({
-          orderNumber: order.orderNumber,
+          orderNumber: details.orderNumber,
           paymentStatus: "authorized",
-          message: "Payment is processing. Confirmation will follow shortly.",
+          message: "Payment is not confirmed. Please wait.",
         });
       }
 
@@ -201,15 +189,19 @@ paymentsRouter.post(
           .json({ message: "Captured payment does not match the order" });
       }
 
-      await Order.updateOne(
-        { _id: order._id, paymentStatus: { $ne: "captured" } },
-        {
-          $set: {
-            paymentStatus: "captured",
-            razorpayPaymentId,
-          },
-        },
-      );
+      const order = await Order.create({
+        ...details,
+        paymentMethod: "razorpay",
+        paymentStatus: "captured",
+        razorpayOrderId,
+        razorpayPaymentId,
+      });
+      pendingCheckoutDetails.delete(razorpayOrderId);
+      try {
+        await sendConfirmedOrderEmail(order);
+      } catch (error) {
+        console.error("Confirmed order email failed", error);
+      }
       return res.json({
         orderNumber: order.orderNumber,
         paymentStatus: "captured",
@@ -250,34 +242,58 @@ paymentWebhookRouter.post(
         razorpayOrderId: payment.order_id,
         paymentMethod: "razorpay",
       });
-      if (!order) return res.json({ received: true });
-
       if (
         event.event === "payment.captured" &&
-        payment.amount === Math.round(order.total * 100) &&
+        !order &&
         payment.currency === "INR"
       ) {
-        await Order.updateOne(
-          { _id: order._id, paymentStatus: { $ne: "captured" } },
-          {
-            $set: {
-              paymentStatus: "captured",
-              razorpayPaymentId: payment.id,
+        const details = pendingCheckoutDetails.get(payment.order_id);
+        if (
+          details &&
+          payment.amount === Math.round(details.total * 100)
+        ) {
+          const confirmedOrder = await Order.create({
+            ...details,
+            paymentMethod: "razorpay",
+            paymentStatus: "captured",
+            razorpayOrderId: payment.order_id,
+            razorpayPaymentId: payment.id,
+          });
+          pendingCheckoutDetails.delete(payment.order_id);
+          try {
+            await sendConfirmedOrderEmail(confirmedOrder);
+          } catch (error) {
+            console.error("Confirmed order email failed", error);
+          }
+        }
+      } else if (event.event === "payment.captured" && order) {
+        if (payment.amount !== Math.round(order.total * 100)) {
+          console.error("Razorpay captured-payment amount mismatch", {
+            orderNumber: order.orderNumber,
+            razorpayOrderId: payment.order_id,
+            amount: payment.amount,
+            currency: payment.currency,
+          });
+        } else {
+          const confirmedOrder = await Order.findOneAndUpdate(
+            { _id: order._id, paymentStatus: { $ne: "captured" } },
+            {
+              $set: {
+                paymentStatus: "captured",
+                razorpayPaymentId: payment.id,
+              },
             },
-          },
-        );
-      } else if (
-        event.event === "payment.captured" &&
-        (payment.amount !== Math.round(order.total * 100) ||
-          payment.currency !== "INR")
-      ) {
-        console.error("Razorpay captured-payment amount mismatch", {
-          orderNumber: order.orderNumber,
-          razorpayOrderId: payment.order_id,
-          amount: payment.amount,
-          currency: payment.currency,
-        });
-      } else if (event.event === "payment.failed") {
+            { new: true },
+          );
+          if (confirmedOrder) {
+            try {
+              await sendConfirmedOrderEmail(confirmedOrder);
+            } catch (error) {
+              console.error("Confirmed order email failed", error);
+            }
+          }
+        }
+      } else if (event.event === "payment.failed" && order) {
         await Order.updateOne(
           { _id: order._id, paymentStatus: { $nin: ["captured", "failed"] } },
           {
@@ -287,6 +303,7 @@ paymentWebhookRouter.post(
             },
           },
         );
+        pendingCheckoutDetails.delete(payment.order_id);
       }
       return res.json({ received: true });
     } catch (error) {

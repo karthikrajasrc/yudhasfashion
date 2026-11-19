@@ -1,11 +1,20 @@
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { Category } from "../models/category.js";
 import { Product } from "../models/product.js";
 import { requireAdmin, requireAuth } from "../middleware/require-auth.js";
+import {
+  deleteProductImage,
+  uploadCategoryImage,
+} from "../services/cloudinary.js";
 
 export const categoriesRouter = Router();
 export const adminCategoriesRouter = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
 
 function serializeCategory(category) {
   return {
@@ -14,6 +23,7 @@ function serializeCategory(category) {
     slug: category.slug,
     displayOrder: category.displayOrder,
     status: category.status,
+    imageUrl: category.imageUrl ?? "",
   };
 }
 
@@ -41,7 +51,7 @@ adminCategoriesRouter.get("/", async (_req, res, next) => {
   }
 });
 
-adminCategoriesRouter.post("/", async (req, res, next) => {
+adminCategoriesRouter.post("/", upload.single("image"), async (req, res, next) => {
   const parsed = z
     .object({
       name: z.string().trim().min(1).max(80),
@@ -66,10 +76,15 @@ adminCategoriesRouter.post("/", async (req, res, next) => {
   }
 
   try {
+    const uploadedImage = req.file
+      ? await uploadCategoryImage(req.file.buffer)
+      : null;
     const category = await Category.create({
       ...parsed.data,
       slug,
       displayOrder: await Category.countDocuments(),
+      imageUrl: uploadedImage?.url ?? "",
+      cloudinaryPublicId: uploadedImage?.publicId ?? "",
     });
     return res.status(201).json({ category: serializeCategory(category) });
   } catch (error) {
@@ -77,6 +92,42 @@ adminCategoriesRouter.post("/", async (req, res, next) => {
       return res
         .status(409)
         .json({ message: "A category with this name already exists" });
+    }
+    return next(error);
+  }
+});
+
+adminCategoriesRouter.patch("/:id", upload.single("image"), async (req, res, next) => {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
+    return res.status(400).json({ message: "Invalid category ID" });
+  }
+  const parsed = z
+    .object({ name: z.string().trim().min(1).max(80) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      message: parsed.error.issues[0]?.message ?? "Invalid category details",
+    });
+  }
+
+  try {
+    const category = await Category.findById(req.params.id);
+    if (!category) return res.status(404).json({ message: "Category not found" });
+
+    let uploadedImage = null;
+    if (req.file) uploadedImage = await uploadCategoryImage(req.file.buffer);
+    const oldPublicId = category.cloudinaryPublicId;
+    category.name = parsed.data.name;
+    if (uploadedImage) {
+      category.imageUrl = uploadedImage.url;
+      category.cloudinaryPublicId = uploadedImage.publicId;
+    }
+    await category.save();
+    if (uploadedImage && oldPublicId) await deleteProductImage(oldPublicId);
+    return res.json({ category: serializeCategory(category) });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: "A category with this name already exists" });
     }
     return next(error);
   }
@@ -103,6 +154,7 @@ adminCategoriesRouter.delete("/:id", async (req, res, next) => {
       });
     }
 
+    if (category.cloudinaryPublicId) await deleteProductImage(category.cloudinaryPublicId);
     await category.deleteOne();
     return res.json({ message: "Category deleted" });
   } catch (error) {

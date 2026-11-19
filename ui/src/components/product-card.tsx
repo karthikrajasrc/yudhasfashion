@@ -1,14 +1,23 @@
 import { Link } from "@tanstack/react-router";
-import { ShoppingBag } from "lucide-react";
+import { Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/data/catalog";
 import { discountPercent, effectivePrice, formatINR } from "@/lib/format";
 import { useShop } from "@/context/shop-context";
 
 export function ProductCard({ product }: { product: Product }) {
-  const { addToCart } = useShop();
+  const { cart, addToCart, setQuantity } = useShop();
   const off = discountPercent(product.price, product.salePrice);
   const price = effectivePrice(product.price, product.salePrice);
   const cover = product.images[0] ?? "";
+  const size = product.sizes[0];
+  const color = product.colors[0];
+  const cartLine = cart.find(
+    (line) =>
+      line.productId === product.id &&
+      line.size === size &&
+      line.color === color,
+  );
+  const quantity = cartLine?.quantity ?? 0;
 
   return (
     <article className="group relative">
@@ -44,26 +53,57 @@ export function ProductCard({ product }: { product: Product }) {
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        disabled={product.stock <= 0}
-        onClick={() =>
-          addToCart({
-            productId: product.id,
-            name: product.name,
-            slug: product.slug,
-            image: cover,
-            price: product.price,
-            salePrice: product.salePrice,
-            size: product.sizes[0],
-            color: product.colors[0],
-          })
-        }
-        className="mt-2 flex w-full items-center justify-center gap-1.5 bg-gold-gradient px-2 py-2 text-[0.58rem] tracking-[0.12em] text-primary-foreground uppercase disabled:opacity-50 sm:mt-3 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-[0.7rem] sm:tracking-[0.22em]"
-      >
-        <ShoppingBag className="size-3.5 sm:size-4" />
-        {product.stock > 0 ? "Add to bag" : "Sold out"}
-      </button>
+      {quantity > 0 ? (
+        <div className="mt-2 grid grid-cols-[42px_1fr_42px] items-center border border-primary/60 sm:mt-3 sm:grid-cols-[48px_1fr_48px]">
+          <button
+            type="button"
+            aria-label={`Decrease ${product.name} quantity`}
+            onClick={() =>
+              setQuantity(product.id, quantity - 1, size, color)
+            }
+            className="grid h-9 place-items-center text-primary sm:h-10"
+          >
+            <Minus className="size-4" />
+          </button>
+          <div className="h-9 border-x border-primary/60 text-center text-[0.58rem] tracking-[0.12em] text-primary sm:h-10 sm:text-[0.7rem] sm:tracking-[0.18em]">
+            <span className="block leading-[36px] sm:leading-[40px]">
+              {quantity} Added
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-label={`Increase ${product.name} quantity`}
+            disabled={quantity >= product.stock}
+            onClick={() =>
+              setQuantity(product.id, quantity + 1, size, color)
+            }
+            className="grid h-9 place-items-center text-primary disabled:opacity-40 sm:h-10"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={product.stock <= 0}
+          onClick={() =>
+            addToCart({
+              productId: product.id,
+              name: product.name,
+              slug: product.slug,
+              image: cover,
+              price: product.price,
+              salePrice: product.salePrice,
+              size,
+              color,
+            })
+          }
+          className="mt-2 flex w-full items-center justify-center gap-1.5 bg-gold-gradient px-2 py-2 text-[0.58rem] tracking-[0.12em] text-primary-foreground uppercase disabled:opacity-50 sm:mt-3 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-[0.7rem] sm:tracking-[0.22em]"
+        >
+          <ShoppingBag className="size-3.5 sm:size-4" />
+          {product.stock > 0 ? "Add to bag" : "Sold out"}
+        </button>
+      )}
 
       <div className="mt-2 space-y-1 text-center sm:mt-4 sm:space-y-1.5">
         <h3 className="font-display text-sm leading-snug sm:text-lg">

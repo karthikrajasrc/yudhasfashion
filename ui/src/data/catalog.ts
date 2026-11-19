@@ -4,6 +4,7 @@ export type Category = {
   slug: string;
   displayOrder: number;
   status: "active" | "inactive";
+  imageUrl?: string;
 };
 
 export type Product = {
