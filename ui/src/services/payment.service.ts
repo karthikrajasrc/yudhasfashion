@@ -80,13 +80,19 @@ export async function verifyRazorpayPayment(data: PaymentVerification) {
 }
 
 export async function getRazorpayPaymentStatus(razorpayOrderId: string) {
-  return readApiResponse<PaymentStatusResponse>(
-    fetch(
-      `${apiUrl}/api/payments/orders/${encodeURIComponent(razorpayOrderId)}/status`,
-      { credentials: "include" },
-    ),
-    "Payment status could not be checked",
-  );
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 10_000);
+  try {
+    return await readApiResponse<PaymentStatusResponse>(
+      fetch(
+        `${apiUrl}/api/payments/orders/${encodeURIComponent(razorpayOrderId)}/status`,
+        { credentials: "include", signal: controller.signal },
+      ),
+      "Payment status could not be checked",
+    );
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 export function loadRazorpay(): Promise<void> {

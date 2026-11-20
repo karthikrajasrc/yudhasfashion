@@ -22,12 +22,25 @@ const checkoutLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many payment attempts. Please try again later." },
 });
+const paymentStatusLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { message: "Too many payment status checks. Please try again later." },
+});
 
 const checkoutVerificationSchema = z.object({
   razorpay_order_id: z.string().min(1).max(100),
   razorpay_payment_id: z.string().min(1).max(100),
   razorpay_signature: z.string().regex(/^[a-f\d]{64}$/i),
 });
+
+function dispatchConfirmedOrderEmail(order) {
+  void sendConfirmedOrderEmail(order).catch((error) => {
+    console.error("Confirmed order email failed", error);
+  });
+}
 
 async function captureAuthorizedPayment(payment, expectedAmount) {
   if (payment.status !== "authorized") return payment;
@@ -73,11 +86,7 @@ async function confirmCapturedPayment(order, payment) {
   );
   const confirmedOrder = updatedOrder ?? (await Order.findById(order._id));
   if (confirmedOrder?.paymentStatus === "captured") {
-    try {
-      await sendConfirmedOrderEmail(confirmedOrder);
-    } catch (error) {
-      console.error("Confirmed order email failed", error);
-    }
+    dispatchConfirmedOrderEmail(confirmedOrder);
     return confirmedOrder;
   }
   return null;
@@ -140,7 +149,7 @@ paymentsRouter.post("/orders", checkoutLimiter, async (req, res, next) => {
 
 paymentsRouter.get(
   "/orders/:razorpayOrderId/status",
-  checkoutLimiter,
+  paymentStatusLimiter,
   async (req, res, next) => {
     const razorpayOrderId = z
       .string()
@@ -185,11 +194,7 @@ paymentsRouter.get(
           await confirmCapturedPayment(order, capturedPayment);
         }
       } else {
-        try {
-          await sendConfirmedOrderEmail(order);
-        } catch (error) {
-          console.error("Confirmed order email failed", error);
-        }
+        dispatchConfirmedOrderEmail(order);
       }
 
       const latestOrder = await Order.findById(order._id);
@@ -234,11 +239,7 @@ paymentsRouter.post("/verify", checkoutLimiter, async (req, res, next) => {
       existingOrder?.paymentStatus === "captured" &&
       existingOrder.razorpayPaymentId === razorpayPaymentId
     ) {
-      try {
-        await sendConfirmedOrderEmail(existingOrder);
-      } catch (error) {
-        console.error("Confirmed order email failed", error);
-      }
+      dispatchConfirmedOrderEmail(existingOrder);
       return res.json({
         orderNumber: existingOrder.orderNumber,
         paymentStatus: existingOrder.paymentStatus,

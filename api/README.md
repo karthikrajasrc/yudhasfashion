@@ -55,7 +55,7 @@ For external availability monitoring, use the deployed API's public `https://<yo
 | `GET`    | `/api/products/:slug`          | Get a product by its slug                                              |
 | `GET`    | `/api/products/:slug/related`  | Get related products                                                   |
 | `GET`    | `/api/categories`              | List active MongoDB categories                                         |
-| `GET`    | `/api/delivery-settings`       | Read the current flat delivery charge and free-delivery threshold      |
+| `GET`    | `/api/delivery-settings`       | Read the current delivery charge, free-delivery threshold and toggle   |
 | `GET`    | `/api/admin/categories`        | List categories (admin only)                                           |
 | `POST`   | `/api/admin/categories`        | Create a category by name (admin only)                                 |
 | `DELETE` | `/api/admin/categories/:id`    | Delete an unused category (admin only)                                 |
@@ -64,11 +64,12 @@ For external availability monitoring, use the deployed API's public `https://<yo
 | `PATCH`  | `/api/admin/products/:id`      | Update product details or replace its image (admin only)               |
 | `DELETE` | `/api/admin/products/:id`      | Delete a product (admin only)                                          |
 | `GET`    | `/api/admin/delivery-settings` | Read delivery pricing settings (admin only)                            |
-| `PUT`    | `/api/admin/delivery-settings` | Set or update the flat delivery charge (admin only)                    |
+| `PUT`    | `/api/admin/delivery-settings` | Set delivery charge and free-delivery rules (admin only)                |
 | `POST`   | `/api/orders`                  | Place an authenticated cash-on-delivery order                          |
 | `GET`    | `/api/orders/mine`             | List the signed-in customer's current and past orders                  |
 | `POST`   | `/api/payments/orders`         | Recalculate cart prices and create a Razorpay order (authenticated)    |
 | `POST`   | `/api/payments/verify`         | Verify checkout signature and confirm captured payment (authenticated) |
+| `GET`    | `/api/payments/orders/:id/status` | Reconcile and read Razorpay payment status                         |
 | `POST`   | `/api/payments/webhook`        | Verify Razorpay event signature and reconcile payment status           |
 | `GET`    | `/api/orders/admin`            | List orders (admin only)                                               |
 | `PATCH`  | `/api/orders/:id/status`       | Update an order status (admin only)                                    |
@@ -77,14 +78,14 @@ User documents include a `role` field restricted to `admin` or `user`. The API a
 
 The `/admin` frontend route and the product/order/category admin API endpoints require both a valid session and the administrator email; the UI role check is only for navigation, not authorization. Categories and products are created from the admin panel and stored in MongoDB; categories use a name and generated slug, and the app does not seed hard-coded category or product data. Product descriptions are stored as a single description. Product image files are uploaded with Multer to `api/uploads`, served from `/uploads`, and excluded from Git. MongoDB stores the image URL rather than image bytes. Public storefront listings, category filters, and product details are read from the same MongoDB collections. Keep the upload directory persistent in deployment or move file storage to a durable object-storage service before scaling beyond one API server.
 
-Set the flat delivery charge from **Admin → Delivery** before accepting orders. The value is stored in MongoDB and applied server-side to both cash-on-delivery and Razorpay orders; the browser never supplies the delivery amount. The existing free-delivery threshold is ₹1,000 and is returned with the public delivery settings. Checkout remains unavailable until an administrator saves a charge.
+Set the flat delivery charge, free-delivery threshold and free-delivery toggle from **Admin → Delivery** before accepting orders. These values are stored in MongoDB and applied server-side to both cash-on-delivery and Razorpay orders; the browser never supplies the delivery amount. Free delivery defaults to enabled for orders of ₹1,000 or more. Checkout remains unavailable until an administrator saves a charge.
 
 ## Razorpay setup and test checklist
 
 1. In the Razorpay dashboard, keep **Test Mode** enabled while integrating. Under **Account & Settings → Website and app settings → API keys**, generate a test key. Copy the Key ID and Key Secret into `api/.env` as `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`. Razorpay only displays the secret when generated; store it securely and do not send it to the frontend.
 2. Restart the API after editing `.env`. The checkout page sends cart identifiers and quantities to the API; the API reloads product prices and stock from MongoDB and creates the Razorpay order in INR paise.
 3. Test checkout at the local UI. Razorpay Checkout is loaded from `https://checkout.razorpay.com/v1/checkout.js`. Use the current test payment details shown in Razorpay's official test-mode documentation. The cart is cleared only after the backend verifies the checkout signature and confirms capture.
-4. Configure webhook delivery for both `payment.captured` and `payment.failed`. Set the webhook URL to `https://<your-api-domain>/api/payments/webhook` and set the same randomly generated webhook secret in the Razorpay dashboard and `RAZORPAY_WEBHOOK_SECRET` in the API environment. For local webhook testing, expose the API with a trusted HTTPS tunnel and use its HTTPS URL; do not expose a production secret in a public tunnel.
+4. Configure webhook delivery for both `payment.captured` and `payment.failed`. The API endpoint is `https://<your-api-domain>/api/payments/webhook`; add that URL in the Razorpay dashboard and set the same randomly generated webhook secret in the dashboard and `RAZORPAY_WEBHOOK_SECRET` in the API environment. For local webhook testing, expose the API with a trusted HTTPS tunnel and use its HTTPS URL; do not expose a production secret in a public tunnel.
 5. Confirm successful test orders in MongoDB and the Admin → Orders page. Razorpay orders store their payment method, payment status, Razorpay order ID, and (after payment) payment ID. The webhook uses the exact raw request body for signature verification and is idempotent for repeated events.
 6. Before going live, activate the Razorpay account and complete website/business verification. Deploy the API over HTTPS, configure production environment secrets and the production webhook URL, then generate **Live Mode** keys and replace the test keys only in the server environment. Test using a low-value live transaction and refund it through the Razorpay dashboard if appropriate.
 

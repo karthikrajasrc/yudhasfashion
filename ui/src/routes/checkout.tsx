@@ -50,6 +50,9 @@ function Checkout() {
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<
     string | null
   >(null);
+  const [paymentOrderIdForPolling, setPaymentOrderIdForPolling] = useState<
+    string | null
+  >(null);
   const activePaymentOrderId = useRef<string | null>(null);
   const completedPayment = useRef(false);
   const statusCheckInProgress = useRef(false);
@@ -74,6 +77,7 @@ function Checkout() {
       if (completedPayment.current) return;
       completedPayment.current = true;
       activePaymentOrderId.current = null;
+      setPaymentOrderIdForPolling(null);
       setConfirmedOrderNumber(orderNumber);
       setPlacingOrder(false);
       clearCart();
@@ -86,12 +90,16 @@ function Checkout() {
   );
 
   const reconcilePaymentStatus = useCallback(
-    async (razorpayOrderId: string) => {
+    async (
+      razorpayOrderId: string,
+      attempts = 4,
+      settleWhenUnconfirmed = true,
+    ) => {
       if (statusCheckInProgress.current || completedPayment.current) return;
       statusCheckInProgress.current = true;
       let lastError: unknown;
       try {
-        for (let attempt = 0; attempt < 4; attempt += 1) {
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
           if (attempt > 0) {
             await new Promise((resolve) => window.setTimeout(resolve, 2000));
           }
@@ -104,6 +112,7 @@ function Checkout() {
             }
             if (result.paymentStatus === "failed") {
               activePaymentOrderId.current = null;
+              setPaymentOrderIdForPolling(null);
               sessionStorage.removeItem("yf.activePaymentOrderId");
               setActionError("Payment was not successful. You can try again.");
               setPlacingOrder(false);
@@ -113,18 +122,45 @@ function Checkout() {
             lastError = error;
           }
         }
-        setActionError(
-          lastError instanceof Error
-            ? `Payment confirmation is taking longer than expected. Check your order status before trying again. ${lastError.message}`
-            : "Payment confirmation is taking longer than expected. Check your order status before trying again.",
-        );
-        setPlacingOrder(false);
+        if (settleWhenUnconfirmed) {
+          setActionError(
+            lastError instanceof Error
+              ? `Payment confirmation is taking longer than expected. Check your order status before trying again. ${lastError.message}`
+              : "Payment confirmation is taking longer than expected. Check your order status before trying again.",
+          );
+          setPlacingOrder(false);
+        } else if (lastError instanceof Error) {
+          setActionError(
+            `Waiting for payment confirmation. Status check failed: ${lastError.message}`,
+          );
+        }
       } finally {
         statusCheckInProgress.current = false;
       }
     },
     [finishPayment],
   );
+
+  useEffect(() => {
+    if (!paymentOrderIdForPolling) return;
+
+    let checks = 0;
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (checks >= 12) {
+        window.clearInterval(intervalId);
+        setActionError(
+          "Payment is still being confirmed. Check your order status before trying again.",
+        );
+        setPlacingOrder(false);
+        return;
+      }
+      checks += 1;
+      void reconcilePaymentStatus(paymentOrderIdForPolling, 1, false);
+    }, 15_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [paymentOrderIdForPolling, reconcilePaymentStatus]);
 
   useEffect(() => {
     const recoverAfterAppSwitch = () => {
@@ -150,6 +186,7 @@ function Checkout() {
     const savedOrderId = sessionStorage.getItem("yf.activePaymentOrderId");
     if (!savedOrderId) return;
     activePaymentOrderId.current = savedOrderId;
+    setPaymentOrderIdForPolling(savedOrderId);
     setPlacingOrder(true);
     void reconcilePaymentStatus(savedOrderId);
   }, [reconcilePaymentStatus]);
@@ -193,6 +230,7 @@ function Checkout() {
         })),
       });
       activePaymentOrderId.current = paymentOrder.order.id;
+      setPaymentOrderIdForPolling(paymentOrder.order.id);
       sessionStorage.setItem("yf.activePaymentOrderId", paymentOrder.order.id);
       await loadRazorpay();
       if (!window.Razorpay) throw new Error("Razorpay checkout could not be initialized");
@@ -229,6 +267,7 @@ function Checkout() {
       });
       checkout.on("payment.failed", (response) => {
         activePaymentOrderId.current = null;
+        setPaymentOrderIdForPolling(null);
         sessionStorage.removeItem("yf.activePaymentOrderId");
         setActionError(response.error?.description ?? "Payment failed.");
         setPlacingOrder(false);
@@ -324,7 +363,24 @@ function Checkout() {
             </label>
           </div>
           {actionError ? (
-            <p role="alert" className="text-sm text-destructive">{actionError}</p>
+            <div role="alert" className="space-y-2 text-sm text-destructive">
+              <p>{actionError}</p>
+              {activePaymentOrderId.current && !placingOrder ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const orderId = activePaymentOrderId.current;
+                    if (!orderId) return;
+                    setActionError(null);
+                    setPlacingOrder(true);
+                    void reconcilePaymentStatus(orderId);
+                  }}
+                  className="underline underline-offset-4"
+                >
+                  Check payment status
+                </button>
+              ) : null}
+            </div>
           ) : null}
           <GoldButton type="submit" className="w-full" disabled={placingOrder || !quote}>
             {placingOrder ? "Processing…" : "Pay securely"}
