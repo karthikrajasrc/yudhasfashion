@@ -10,7 +10,9 @@ async function readSettings() {
   const settings = await DeliverySettings.findOne({ key: "global" }).lean();
   return {
     deliveryCharge: settings?.deliveryCharge ?? null,
-    freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
+    freeDeliveryThreshold:
+      settings?.freeDeliveryThreshold ?? FREE_DELIVERY_THRESHOLD,
+    freeDeliveryEnabled: settings?.freeDeliveryEnabled ?? true,
   };
 }
 
@@ -37,19 +39,33 @@ adminDeliverySettingsRouter.put("/", async (req, res, next) => {
   const parsed = z
     .object({
       deliveryCharge: z.number().finite().min(0).max(100_000),
+      freeDeliveryThreshold: z.number().finite().min(0).max(100_000).optional(),
+      freeDeliveryEnabled: z.boolean().optional(),
     })
     .safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Enter a valid delivery charge" });
+    return res.status(400).json({ message: "Enter valid delivery settings" });
   }
 
   try {
+    const currentSettings = await DeliverySettings.findOne({
+      key: "global",
+    }).lean();
+    const freeDeliveryThreshold =
+      parsed.data.freeDeliveryThreshold ??
+      currentSettings?.freeDeliveryThreshold ??
+      FREE_DELIVERY_THRESHOLD;
+    const freeDeliveryEnabled =
+      parsed.data.freeDeliveryEnabled ??
+      currentSettings?.freeDeliveryEnabled ??
+      true;
     const settings = await DeliverySettings.findOneAndUpdate(
       { key: "global" },
       {
         $set: {
           deliveryCharge: parsed.data.deliveryCharge,
-          freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
+          freeDeliveryThreshold,
+          freeDeliveryEnabled,
         },
         $setOnInsert: { key: "global" },
       },
@@ -63,7 +79,8 @@ adminDeliverySettingsRouter.put("/", async (req, res, next) => {
     return res.json({
       settings: {
         deliveryCharge: settings.deliveryCharge,
-        freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
+        freeDeliveryThreshold: settings.freeDeliveryThreshold,
+        freeDeliveryEnabled: settings.freeDeliveryEnabled,
       },
     });
   } catch (error) {

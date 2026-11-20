@@ -1,7 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, ShoppingBag } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { ArrowLeft, CheckCircle2, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { GoldButton } from "@/components/section";
 import { useAuth } from "@/context/auth-context";
@@ -13,6 +19,7 @@ import {
 } from "@/services/shop.service";
 import {
   createRazorpayOrder,
+  getRazorpayPaymentStatus,
   loadRazorpay,
   verifyRazorpayPayment,
 } from "@/services/payment.service";
@@ -40,6 +47,13 @@ function Checkout() {
   const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<
+    string | null
+  >(null);
+  const activePaymentOrderId = useRef<string | null>(null);
+  const completedPayment = useRef(false);
+  const statusCheckInProgress = useRef(false);
+  const paymentPageWasHidden = useRef(false);
 
   useEffect(() => {
     if (user && !customerName) setCustomerName(user.name);
@@ -54,6 +68,91 @@ function Checkout() {
       setCoupon(null);
     }
   }, []);
+
+  const finishPayment = useCallback(
+    (orderNumber: string) => {
+      if (completedPayment.current) return;
+      completedPayment.current = true;
+      activePaymentOrderId.current = null;
+      setConfirmedOrderNumber(orderNumber);
+      setPlacingOrder(false);
+      clearCart();
+      sessionStorage.removeItem("yf.checkoutCoupon");
+      sessionStorage.removeItem("yf.activePaymentOrderId");
+      setCoupon(null);
+      toast.success(`Payment received for ${orderNumber}`);
+    },
+    [clearCart],
+  );
+
+  const reconcilePaymentStatus = useCallback(
+    async (razorpayOrderId: string) => {
+      if (statusCheckInProgress.current || completedPayment.current) return;
+      statusCheckInProgress.current = true;
+      let lastError: unknown;
+      try {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          if (attempt > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, 2000));
+          }
+          if (completedPayment.current) return;
+          try {
+            const result = await getRazorpayPaymentStatus(razorpayOrderId);
+            if (result.paymentStatus === "captured") {
+              finishPayment(result.orderNumber);
+              return;
+            }
+            if (result.paymentStatus === "failed") {
+              activePaymentOrderId.current = null;
+              sessionStorage.removeItem("yf.activePaymentOrderId");
+              setActionError("Payment was not successful. You can try again.");
+              setPlacingOrder(false);
+              return;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        setActionError(
+          lastError instanceof Error
+            ? `Payment confirmation is taking longer than expected. Check your order status before trying again. ${lastError.message}`
+            : "Payment confirmation is taking longer than expected. Check your order status before trying again.",
+        );
+        setPlacingOrder(false);
+      } finally {
+        statusCheckInProgress.current = false;
+      }
+    },
+    [finishPayment],
+  );
+
+  useEffect(() => {
+    const recoverAfterAppSwitch = () => {
+      if (document.visibilityState === "hidden") {
+        paymentPageWasHidden.current = true;
+        return;
+      }
+      if (!paymentPageWasHidden.current) return;
+      paymentPageWasHidden.current = false;
+      const orderId = activePaymentOrderId.current;
+      if (orderId) void reconcilePaymentStatus(orderId);
+    };
+
+    document.addEventListener("visibilitychange", recoverAfterAppSwitch);
+    window.addEventListener("focus", recoverAfterAppSwitch);
+    return () => {
+      document.removeEventListener("visibilitychange", recoverAfterAppSwitch);
+      window.removeEventListener("focus", recoverAfterAppSwitch);
+    };
+  }, [reconcilePaymentStatus]);
+
+  useEffect(() => {
+    const savedOrderId = sessionStorage.getItem("yf.activePaymentOrderId");
+    if (!savedOrderId) return;
+    activePaymentOrderId.current = savedOrderId;
+    setPlacingOrder(true);
+    void reconcilePaymentStatus(savedOrderId);
+  }, [reconcilePaymentStatus]);
 
   const deliverySettingsQuery = useQuery({
     queryKey: ["delivery-settings"],
@@ -73,6 +172,8 @@ function Checkout() {
   const placeOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setActionError(null);
+    setConfirmedOrderNumber(null);
+    completedPayment.current = false;
     setPlacingOrder(true);
     try {
       const paymentOrder = await createRazorpayOrder({
@@ -91,6 +192,8 @@ function Checkout() {
           ...(line.color ? { color: line.color } : {}),
         })),
       });
+      activePaymentOrderId.current = paymentOrder.order.id;
+      sessionStorage.setItem("yf.activePaymentOrderId", paymentOrder.order.id);
       await loadRazorpay();
       if (!window.Razorpay) throw new Error("Razorpay checkout could not be initialized");
 
@@ -111,24 +214,22 @@ function Checkout() {
           void verifyRazorpayPayment(response)
             .then((result) => {
               if (result.paymentStatus === "captured") {
-                toast.success(`Payment received for ${result.orderNumber}`);
-                clearCart();
-                sessionStorage.removeItem("yf.checkoutCoupon");
-                setCoupon(null);
-              } else {
-                toast.info(result.message ?? "Payment is processing.");
+                finishPayment(result.orderNumber);
+                return;
               }
+              void reconcilePaymentStatus(paymentOrder.order.id);
             })
-            .catch((error: unknown) =>
-              setActionError(
-                error instanceof Error ? error.message : "Payment verification failed",
-              ),
-            )
-            .finally(() => setPlacingOrder(false));
+            .catch(() => {
+              void reconcilePaymentStatus(paymentOrder.order.id);
+            });
         },
-        modal: { ondismiss: () => setPlacingOrder(false) },
+        modal: {
+          ondismiss: () => void reconcilePaymentStatus(paymentOrder.order.id),
+        },
       });
       checkout.on("payment.failed", (response) => {
+        activePaymentOrderId.current = null;
+        sessionStorage.removeItem("yf.activePaymentOrderId");
         setActionError(response.error?.description ?? "Payment failed.");
         setPlacingOrder(false);
       });
@@ -138,6 +239,31 @@ function Checkout() {
       setPlacingOrder(false);
     }
   };
+
+  if (confirmedOrderNumber) {
+    return (
+      <section className="mx-auto max-w-xl px-4 py-20 text-center">
+        <CheckCircle2 className="mx-auto size-14 text-primary" />
+        <p className="eyebrow mt-6">Payment confirmed</p>
+        <h1 className="mt-3 text-4xl">Order confirmed</h1>
+        <p className="mt-4 text-sm text-muted-foreground">
+          Thank you for your purchase. Your order number is{" "}
+          <strong className="text-foreground">{confirmedOrderNumber}</strong>.
+        </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link to="/orders">
+            <GoldButton type="button">Track your order</GoldButton>
+          </Link>
+          <Link
+            to="/shop"
+            className="inline-flex items-center border border-border px-5 py-3 text-xs tracking-[0.12em] uppercase"
+          >
+            Continue shopping
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   if (cartCount === 0) {
     return (

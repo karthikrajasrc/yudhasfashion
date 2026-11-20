@@ -84,8 +84,11 @@ export async function buildOrderDetails(user, input) {
       "Coupon is invalid or does not meet the minimum order",
     );
   }
+  const freeDeliveryThreshold =
+    deliverySettings.freeDeliveryThreshold ?? FREE_DELIVERY_THRESHOLD;
+  const freeDeliveryEnabled = deliverySettings.freeDeliveryEnabled ?? true;
   const deliveryCharge =
-    subtotal >= FREE_DELIVERY_THRESHOLD
+    freeDeliveryEnabled && subtotal >= freeDeliveryThreshold
       ? 0
       : deliverySettings.deliveryCharge;
 

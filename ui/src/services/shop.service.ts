@@ -127,6 +127,7 @@ export const getCategoryProducts = async (categorySlugs: string[]) => {
 export type DeliverySettings = {
   deliveryCharge: number | null;
   freeDeliveryThreshold: number;
+  freeDeliveryEnabled: boolean;
 };
 
 export const getDeliverySettings = async (): Promise<DeliverySettings> => {
@@ -141,10 +142,13 @@ export const getDeliveryQuote = (
   settings: DeliverySettings | undefined,
 ) => {
   if (!settings || settings.deliveryCharge === null) return null;
-  const freeDelivery = subtotal >= settings.freeDeliveryThreshold;
+  const freeDeliveryEnabled = settings.freeDeliveryEnabled ?? true;
+  const freeDelivery =
+    freeDeliveryEnabled && subtotal >= settings.freeDeliveryThreshold;
   return {
     charge: freeDelivery ? 0 : settings.deliveryCharge,
     freeDelivery,
+    freeDeliveryEnabled,
     threshold: settings.freeDeliveryThreshold,
   };
 };

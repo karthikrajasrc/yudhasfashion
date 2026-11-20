@@ -12,6 +12,7 @@ const deliverySettingsSchema = new mongoose.Schema(
       min: 0,
       default: FREE_DELIVERY_THRESHOLD,
     },
+    freeDeliveryEnabled: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

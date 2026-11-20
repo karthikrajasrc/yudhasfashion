@@ -40,7 +40,6 @@ export type AdminOrder = {
   city: string;
   state: string;
   pincode: string;
-  pincode: string;
   district?: string;
   items: {
     productId: string;
@@ -78,6 +77,7 @@ export type NewOrder = {
   shippingAddress: string;
   city: string;
   state: string;
+  pincode: string;
   couponCode?: string;
   items: {
     productId: string;
@@ -90,6 +90,7 @@ export type NewOrder = {
 export type DeliverySettings = {
   deliveryCharge: number | null;
   freeDeliveryThreshold: number;
+  freeDeliveryEnabled: boolean;
 };
 
 export async function listAdminProducts() {
@@ -208,13 +209,17 @@ export async function getAdminDeliverySettings() {
   return result.settings;
 }
 
-export async function updateAdminDeliveryCharge(deliveryCharge: number) {
+export async function updateAdminDeliverySettings(
+  settings: Omit<DeliverySettings, "deliveryCharge"> & {
+    deliveryCharge: number;
+  },
+) {
   const result = await readApiResponse<{ settings: DeliverySettings }>(
     fetch(`${apiUrl}/api/admin/delivery-settings`, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deliveryCharge }),
+      body: JSON.stringify(settings),
     }),
     "The admin request could not be completed",
   );
@@ -233,4 +238,3 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
   );
   return result.order;
 }
-

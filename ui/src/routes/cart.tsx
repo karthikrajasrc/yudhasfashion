@@ -251,7 +251,9 @@ function Cart() {
                 {total === null ? "—" : formatINR(total)}
               </span>
             </div>
-            {quote && !quote.freeDelivery && (
+            {quote &&
+              quote.freeDeliveryEnabled &&
+              !quote.freeDelivery && (
               <p className="text-xs text-muted-foreground">
                 Add {formatINR(Math.max(0, quote.threshold - subtotal))} more
                 for free delivery.

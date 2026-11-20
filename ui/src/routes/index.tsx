@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Shop handcrafted gold-finish jewellery, temple necklaces and pure silk sarees at Yudhas Fashion. Free delivery above ₹1,000 across Tamil Nadu.",
+          "Shop handcrafted gold-finish jewellery, temple necklaces and pure silk sarees at Yudhas Fashion.",
       },
       {
         property: "og:title",

@@ -17,6 +17,11 @@ type PaymentVerification = {
   razorpay_signature: string;
 };
 
+export type PaymentStatusResponse = {
+  orderNumber: string;
+  paymentStatus: "created" | "authorized" | "captured" | "failed";
+};
+
 export type RazorpayCheckoutResponse = PaymentVerification;
 
 type RazorpayOptions = {
@@ -63,11 +68,7 @@ export async function createRazorpayOrder(data: NewOrder) {
 }
 
 export async function verifyRazorpayPayment(data: PaymentVerification) {
-  return readApiResponse<{
-    orderNumber: string;
-    paymentStatus: "captured" | "authorized";
-    message?: string;
-  }>(
+  return readApiResponse<PaymentStatusResponse & { message?: string }>(
     fetch(`${apiUrl}/api/payments/verify`, {
       method: "POST",
       credentials: "include",
@@ -75,6 +76,16 @@ export async function verifyRazorpayPayment(data: PaymentVerification) {
       body: JSON.stringify(data),
     }),
     "Payment request could not be completed",
+  );
+}
+
+export async function getRazorpayPaymentStatus(razorpayOrderId: string) {
+  return readApiResponse<PaymentStatusResponse>(
+    fetch(
+      `${apiUrl}/api/payments/orders/${encodeURIComponent(razorpayOrderId)}/status`,
+      { credentials: "include" },
+    ),
+    "Payment status could not be checked",
   );
 }
 

@@ -30,6 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth-context";
 import { formatINR } from "@/lib/format";
 import {
@@ -42,7 +43,7 @@ import {
   listAdminOrders,
   listAdminProducts,
   getAdminDeliverySettings,
-  updateAdminDeliveryCharge,
+  updateAdminDeliverySettings,
   updateOrderStatus,
   type OrderStatus,
   type AdminCategory,
@@ -201,8 +202,8 @@ function AdminPage() {
     },
     onError: (error) => setMutationError(error.message),
   });
-  const saveDeliveryCharge = useMutation({
-    mutationFn: updateAdminDeliveryCharge,
+  const saveDeliverySettings = useMutation({
+    mutationFn: updateAdminDeliverySettings,
     onMutate: () => setMutationError(null),
     onSuccess: async () => {
       await Promise.all([
@@ -211,7 +212,7 @@ function AdminPage() {
         }),
         queryClient.invalidateQueries({ queryKey: ["delivery-settings"] }),
       ]);
-      toast.success("Delivery charge saved");
+      toast.success("Delivery settings saved");
     },
     onError: (error) => setMutationError(error.message),
   });
@@ -545,8 +546,11 @@ function AdminPage() {
           freeDeliveryThreshold={
             deliverySettingsQuery.data?.freeDeliveryThreshold
           }
-          busy={saveDeliveryCharge.isPending}
-          onSave={(charge) => saveDeliveryCharge.mutate(charge)}
+          freeDeliveryEnabled={
+            deliverySettingsQuery.data?.freeDeliveryEnabled ?? true
+          }
+          busy={saveDeliverySettings.isPending}
+          onSave={(settings) => saveDeliverySettings.mutate(settings)}
         />
       )}
       <EditProductDialog
@@ -574,6 +578,7 @@ function DeliverySettingsPanel({
   errorMessage,
   deliveryCharge,
   freeDeliveryThreshold,
+  freeDeliveryEnabled,
   busy,
   onSave,
 }: {
@@ -582,20 +587,45 @@ function DeliverySettingsPanel({
   errorMessage?: string | undefined;
   deliveryCharge: number | null;
   freeDeliveryThreshold?: number | undefined;
+  freeDeliveryEnabled: boolean;
   busy: boolean;
-  onSave: (charge: number) => void;
+  onSave: (settings: {
+    deliveryCharge: number;
+    freeDeliveryThreshold: number;
+    freeDeliveryEnabled: boolean;
+  }) => void;
 }) {
   const [charge, setCharge] = useState("");
+  const [threshold, setThreshold] = useState("");
+  const [freeDelivery, setFreeDelivery] = useState(freeDeliveryEnabled);
 
   useEffect(() => {
     setCharge(deliveryCharge === null ? "" : String(deliveryCharge));
-  }, [deliveryCharge]);
+    setThreshold(
+      freeDeliveryThreshold === undefined ? "" : String(freeDeliveryThreshold),
+    );
+    setFreeDelivery(freeDeliveryEnabled);
+  }, [deliveryCharge, freeDeliveryThreshold, freeDeliveryEnabled]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const parsedCharge = Number(charge);
-    if (!Number.isFinite(parsedCharge) || parsedCharge < 0) return;
-    onSave(parsedCharge);
+    const parsedThreshold = Number(threshold);
+    if (
+      !Number.isFinite(parsedCharge) ||
+      parsedCharge < 0 ||
+      parsedCharge > 100_000 ||
+      !Number.isFinite(parsedThreshold) ||
+      parsedThreshold < 0 ||
+      parsedThreshold > 100_000
+    ) {
+      return;
+    }
+    onSave({
+      deliveryCharge: parsedCharge,
+      freeDeliveryThreshold: parsedThreshold,
+      freeDeliveryEnabled: freeDelivery,
+    });
   };
 
   return (
@@ -608,8 +638,8 @@ function DeliverySettingsPanel({
           <p className="eyebrow">Delivery pricing</p>
           <h2 className="mt-2 text-2xl">Flat delivery charge</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            This charge applies to all customer orders below the free-delivery
-            threshold.
+            Set the delivery charge and decide when customers qualify for free
+            delivery.
           </p>
         </div>
         {isPending ? (
@@ -641,14 +671,54 @@ function DeliverySettingsPanel({
                 className={fieldClass}
               />
             </label>
-            {freeDeliveryThreshold !== undefined && (
-              <p className="text-xs text-muted-foreground">
-                Orders of {formatINR(freeDeliveryThreshold)} or more receive
-                free delivery.
-              </p>
-            )}
-            <GoldButton type="submit" disabled={busy || charge.trim() === ""}>
-              {busy ? "Saving…" : "Save delivery charge"}
+            <label className="block space-y-1.5">
+              <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                Free-delivery threshold (₹)
+              </span>
+              <input
+                type="number"
+                min="0"
+                max="100000"
+                step="1"
+                required
+                value={threshold}
+                onChange={(event) => setThreshold(event.target.value)}
+                className={fieldClass}
+              />
+              <span className="block text-xs text-muted-foreground">
+                Orders at or above this amount qualify when free delivery is
+                enabled. Set to 0 to apply it to all orders.
+              </span>
+            </label>
+            <div className="flex items-center justify-between gap-4 border border-border p-3">
+              <div>
+                <label
+                  htmlFor="free-delivery-enabled"
+                  className="text-sm font-medium"
+                >
+                  Enable free delivery
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {freeDelivery
+                    ? "Eligible orders will not be charged for delivery."
+                    : "The delivery charge applies to every order."}
+                </p>
+              </div>
+              <Switch
+                id="free-delivery-enabled"
+                checked={freeDelivery}
+                onCheckedChange={setFreeDelivery}
+                disabled={busy}
+                aria-label="Enable free delivery"
+              />
+            </div>
+            <GoldButton
+              type="submit"
+              disabled={
+                busy || charge.trim() === "" || threshold.trim() === ""
+              }
+            >
+              {busy ? "Saving…" : "Save delivery settings"}
             </GoldButton>
           </>
         )}

@@ -1,11 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Menu, Search, ShoppingBag, ShieldCheck, X } from "lucide-react";
 import { AccountMenu } from "@/components/account-menu";
 
 import logo from "@/assets/logo.png";
 import { useShop } from "@/context/shop-context";
 import { useAuth } from "@/context/auth-context";
+import { formatINR } from "@/lib/format";
+import { getDeliverySettings } from "@/services/shop.service";
 
 const links = [
   { to: "/", label: "Home" },
@@ -19,6 +22,10 @@ export function SiteHeader() {
   const { cartCount } = useShop();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const { data: deliverySettings } = useQuery({
+    queryKey: ["delivery-settings"],
+    queryFn: getDeliverySettings,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -38,9 +45,13 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
-      <p className="bg-wine-gradient py-2 text-center text-[0.62rem] tracking-[0.28em] text-ivory uppercase">
-        Complimentary delivery on orders above ₹1,000
-      </p>
+      {deliverySettings?.freeDeliveryEnabled ? (
+        <p className="bg-wine-gradient py-2 text-center text-[0.62rem] tracking-[0.28em] text-ivory uppercase">
+          {deliverySettings.freeDeliveryThreshold === 0
+            ? "Complimentary delivery on all orders"
+            : `Complimentary delivery on orders of ${formatINR(deliverySettings.freeDeliveryThreshold)} or more`}
+        </p>
+      ) : null}
 
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-8">
         <button

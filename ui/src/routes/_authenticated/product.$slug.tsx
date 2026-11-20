@@ -337,7 +337,9 @@ function ProductDetail() {
                     : "Delivery charge is not configured yet."}
                 </p>
               )}
-              {quote && !quote.freeDelivery && (
+              {quote &&
+                quote.freeDeliveryEnabled &&
+                !quote.freeDelivery && (
                 <p className="text-xs text-muted-foreground">
                   Free delivery on orders above {formatINR(quote.threshold)}.
                 </p>
