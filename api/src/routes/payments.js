@@ -37,9 +37,17 @@ const checkoutVerificationSchema = z.object({
 });
 
 function dispatchConfirmedOrderEmail(order) {
-  void sendConfirmedOrderEmail(order).catch((error) => {
-    console.error("Confirmed order email failed", error);
-  });
+  void sendConfirmedOrderEmail(order)
+    .then((sent) => {
+      if (sent) {
+        console.info("Confirmed order email accepted by EmailJS", {
+          orderNumber: order.orderNumber,
+        });
+      }
+    })
+    .catch((error) => {
+      console.error("Confirmed order email failed", error);
+    });
 }
 
 async function captureAuthorizedPayment(payment, expectedAmount) {

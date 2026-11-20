@@ -1,7 +1,10 @@
-import nodemailer from "nodemailer";
 import { config } from "../config.js";
 
 const recipient = "yudhasfashion@gmail.com";
+const emailJsEndpoint = "https://api.emailjs.com/api/v1.0/email/send";
+const activeOrderEmails = new Set();
+let emailRequestQueue = Promise.resolve();
+let lastEmailRequestAt = 0;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -11,88 +14,90 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function createTransport() {
-  if (!config.smtpUser || !config.smtpPass) return null;
-  return nodemailer.createTransport({
-    host: config.smtpHost,
-    port: config.smtpPort,
-    secure: config.smtpSecure,
-    auth: {
-      user: config.smtpUser,
-      pass: config.smtpPass,
-    },
+function queueEmailRequest(payload) {
+  const request = emailRequestQueue.then(async () => {
+    const delay = 1000 - (Date.now() - lastEmailRequestAt);
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    lastEmailRequestAt = Date.now();
+    return fetch(emailJsEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   });
+  emailRequestQueue = request.then(
+    () => undefined,
+    () => undefined,
+  );
+  return request;
 }
 
 export async function sendConfirmedOrderEmail(order) {
   if (!order || order.emailSentAt) return false;
+  if (activeOrderEmails.has(String(order._id))) return false;
 
-  const transporter = createTransport();
-  if (!transporter) {
-    console.warn("Confirmed order email skipped: SMTP credentials are not configured");
-    return false;
+  if (!config.emailJsServiceId) {
+    throw new Error("EMAILJS_SERVICE_ID is not configured");
+  }
+  if (!config.emailJsTemplateId) {
+    throw new Error("EMAILJS_TEMPLATE_ID is not configured");
+  }
+  if (!config.emailJsPublicKey) {
+    throw new Error("EMAILJS_PUBLIC_KEY is not configured");
+  }
+  if (!config.emailJsPrivateKey) {
+    throw new Error("EMAILJS_PRIVATE_KEY is not configured");
   }
 
-  const itemRows = order.items
-    .map(
-      (item) => `
-        <tr>
-          <td style="padding:8px;border-bottom:1px solid #eee">${escapeHtml(item.name)}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee">${item.quantity}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee">₹${item.price * item.quantity}</td>
-        </tr>`,
-    )
-    .join("");
+  const orderId = String(order._id);
+  activeOrderEmails.add(orderId);
+  try {
+    const templateParams = {
+      email: recipient,
+      order_id: order.orderNumber,
+      customer_name: escapeHtml(order.customerName),
+      customer_email: order.customerEmail || "Not provided",
+      customer_phone: escapeHtml(order.phone),
+      shipping_address: escapeHtml(order.shippingAddress),
+      city: escapeHtml(order.city),
+      state: escapeHtml(order.state),
+      pincode: escapeHtml(order.pincode),
+      orders: order.items.map((item) => ({
+        image: escapeHtml(item.image),
+        name: escapeHtml(item.name),
+        units: item.quantity,
+        price: item.price * item.quantity,
+      })),
+      cost: {
+        subtotal: order.subtotal,
+        shipping: order.deliveryCharge,
+        tax: 0,
+        discount: order.discount,
+        total: order.total,
+      },
+      payment_id: order.razorpayPaymentId || "",
+    };
+    const response = await queueEmailRequest({
+      service_id: config.emailJsServiceId,
+      template_id: config.emailJsTemplateId,
+      user_id: config.emailJsPublicKey,
+      accessToken: config.emailJsPrivateKey,
+      template_params: templateParams,
+    });
 
-  const address = [
-    order.customerName,
-    order.shippingAddress,
-    [order.city, order.state, order.pincode].filter(Boolean).join(", "),
-    `Phone: ${order.phone}`,
-  ]
-    .filter(Boolean)
-    .join("<br>");
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(
+        `EmailJS request failed (${response.status}): ${details || response.statusText}`,
+      );
+    }
 
-  await transporter.sendMail({
-    from: config.emailFrom,
-    to: recipient,
-    replyTo: order.customerEmail || undefined,
-    subject: `New confirmed order ${order.orderNumber}`,
-    text: [
-      `New confirmed order: ${order.orderNumber}`,
-      `Customer: ${order.customerName}`,
-      `Email: ${order.customerEmail || "Not provided"}`,
-      `Phone: ${order.phone}`,
-      `Address: ${order.shippingAddress}, ${order.city}, ${order.state} - ${order.pincode}`,
-      `Payment: Razorpay captured`,
-      `Payment ID: ${order.razorpayPaymentId}`,
-      `Total: ₹${order.total}`,
-    ].join("\n"),
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:680px;color:#201b18">
-        <h2>New confirmed order</h2>
-        <p><strong>Order:</strong> ${escapeHtml(order.orderNumber)}</p>
-        <p><strong>Payment:</strong> Razorpay captured<br>
-        <strong>Payment ID:</strong> ${escapeHtml(order.razorpayPaymentId)}</p>
-        <h3>Customer</h3>
-        <p>${address}</p>
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr>
-              <th style="text-align:left;padding:8px;border-bottom:2px solid #ddd">Item</th>
-              <th style="text-align:left;padding:8px;border-bottom:2px solid #ddd">Qty</th>
-              <th style="text-align:left;padding:8px;border-bottom:2px solid #ddd">Amount</th>
-            </tr>
-          </thead>
-          <tbody>${itemRows}</tbody>
-        </table>
-        <p><strong>Subtotal:</strong> ₹${order.subtotal}</p>
-        <p><strong>Discount:</strong> ₹${order.discount}</p>
-        <p><strong>Delivery:</strong> ₹${order.deliveryCharge}</p>
-        <h3>Total: ₹${order.total}</h3>
-      </div>`,
-  });
-  order.emailSentAt = new Date();
-  await order.save();
-  return true;
+    order.emailSentAt = new Date();
+    await order.save();
+    return true;
+  } finally {
+    activeOrderEmails.delete(orderId);
+  }
 }
